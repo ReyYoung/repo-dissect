@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0] - 2026-10-13
+
+### Changed
+
+- `checklinks.py` now verifies both commit-pinned permalinks and `path:line` references (file exists at the commit, line range in bounds).
+- Bare file names are resolved to their full path when unique in the repository; ambiguous names are reported.
+- In GitHub projects, `path:line` references are reported as "not a permalink"; `--fix` rewrites them into permalinks.
+- A numbered layer document with zero code references now fails the check instead of passing with "0 links, 0 problems".
+- New hint: lines marked ✅ without a line-level code reference are listed for follow-up (does not affect the exit code).
+- `checklinks.py` accepts `local` in place of `owner/repo` for local repositories.
+- SKILL.md evidence rules: full paths from the repository root, a code reference on every ✅ line, and a passing check requires exit code 0 with references in every layer document.
+
 ## [1.0.0] - 2026-10-12
 
 ### Added
