@@ -1,0 +1,81 @@
+<svg viewBox="0 0 1040 586" width="1040" height="586" role="img" aria-label="RAGFlow 业务全景：7 个使用场景及其依赖的能力" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto"><rect x="0" y="0" width="100%" height="100%" fill="#FFFFFF"/><text x="4.0" y="18.0" font-size="12.5" font-weight="600" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>谁在用</text>
+<text x="156.0" y="18.0" font-size="12.5" font-weight="600" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>做什么</text>
+<text x="476.0" y="18.0" font-size="12.5" font-weight="600" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>依赖哪些系统能力</text>
+<text x="840.0" y="18.0" font-size="12.5" font-weight="600" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>连接哪些外部系统</text>
+<rect x="0" y="30" width="1040" height="72" rx="8" fill="#F6F7FA"/>
+<rect x="152" y="40" width="300" height="52" rx="6" fill="#FFFFFF" stroke="#CCD2E0"/>
+<text x="164.0" y="63.0" font-size="13.5" font-weight="600" fill="#181D2B" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>1. 知识库问答</text>
+<text x="164.0" y="81.0" font-size="11.5" font-weight="400" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>上传或同步文档，带原文引用的问答</text>
+<path d="M142 62 L148 66 L142 70" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M464 62 L470 66 L464 70" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M828 62 L834 66 L828 70" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<rect x="8.0" y="54.0" width="66.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="41.0" y="70.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>业务人员</text>
+<rect x="484.0" y="54.0" width="90.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="529.0" y="70.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>文档深度解析</text>
+<rect x="582.0" y="54.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="615.0" y="70.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>混合检索</text>
+<rect x="656.0" y="54.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="689.0" y="70.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>聊天助手</text>
+<rect x="848.0" y="54.0" width="78.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="887.0" y="70.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>大模型服务</text>
+<rect x="152" y="118" width="300" height="52" rx="6" fill="#FFFFFF" stroke="#CCD2E0"/>
+<text x="164.0" y="141.0" font-size="13.5" font-weight="600" fill="#181D2B" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>2. 企业搜索门户</text>
+<text x="164.0" y="159.0" font-size="11.5" font-weight="400" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>AI 摘要、相关推荐，可嵌入门户</text>
+<path d="M142 140 L148 144 L142 148" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M464 140 L470 144 L464 148" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M828 140 L834 144 L828 148" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<rect x="8.0" y="132.0" width="66.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="41.0" y="148.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>业务人员</text>
+<rect x="484.0" y="132.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="517.0" y="148.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>混合检索</text>
+<rect x="558.0" y="132.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="591.0" y="148.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>搜索应用</text>
+<rect x="848.0" y="132.0" width="66.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="881.0" y="148.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>业务门户</text>
+<rect x="0" y="186" width="1040" height="72" rx="8" fill="#F6F7FA"/>
+<rect x="152" y="196" width="300" height="52" rx="6" fill="#FFFFFF" stroke="#CCD2E0"/>
+<text x="164.0" y="219.0" font-size="13.5" font-weight="600" fill="#181D2B" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>3. 业务流程智能体</text>
+<text x="164.0" y="237.0" font-size="11.5" font-weight="400" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>画布编排检索、模型、HTTP、SQL 节点</text>
+<path d="M142 218 L148 222 L142 226" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M464 218 L470 222 L464 226" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M828 218 L834 222 L828 226" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<rect x="8.0" y="210.0" width="78.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="47.0" y="226.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>应用搭建者</text>
+<rect x="484.0" y="210.0" width="90.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="529.0" y="226.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>智能体工作流</text>
+<rect x="582.0" y="210.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="615.0" y="226.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>代码沙箱</text>
+<rect x="848.0" y="210.0" width="66.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="881.0" y="226.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>业务系统</text>
+<rect x="922.0" y="210.0" width="78.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="961.0" y="226.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>大模型服务</text>
+<rect x="152" y="274" width="300" height="62" rx="6" fill="#FFFFFF" stroke="#CCD2E0"/>
+<text x="164.0" y="302.0" font-size="13.5" font-weight="600" fill="#181D2B" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>4. 多源知识汇聚</text>
+<text x="164.0" y="320.0" font-size="11.5" font-weight="400" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>38 类连接器定时同步进知识库</text>
+<path d="M142 301 L148 305 L142 309" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M464 301 L470 305 L464 309" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M828 301 L834 305 L828 309" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<rect x="8.0" y="293.0" width="66.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="41.0" y="309.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>知识运营</text>
+<rect x="484.0" y="293.0" width="78.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="523.0" y="309.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>数据源同步</text>
+<rect x="570.0" y="293.0" width="78.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="609.0" y="309.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>知识库管理</text>
+<rect x="848.0" y="278.0" width="85.2" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="890.6" y="294.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>SharePoint</text>
+<rect x="941.2" y="278.0" width="54.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="968.2" y="294.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>数据库</text>
+<rect x="848.0" y="308.0" width="42.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="869.0" y="324.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>网盘</text>
+<rect x="0" y="352" width="1040" height="72" rx="8" fill="#F6F7FA"/>
+<rect x="152" y="362" width="300" height="52" rx="6" fill="#FFFFFF" stroke="#CCD2E0"/>
+<text x="164.0" y="385.0" font-size="13.5" font-weight="600" fill="#181D2B" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>5. 知识深加工</text>
+<text x="164.0" y="403.0" font-size="11.5" font-weight="400" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>生成 Wiki、图谱、知识树（实验性）</text>
+<path d="M142 384 L148 388 L142 392" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M464 384 L470 388 L464 392" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M828 384 L834 388 L828 392" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<rect x="8.0" y="376.0" width="66.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="41.0" y="392.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>知识运营</text>
+<rect x="484.0" y="376.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="517.0" y="392.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>知识编译</text>
+<rect x="848.0" y="376.0" width="78.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="887.0" y="392.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>大模型服务</text>
+<rect x="152" y="440" width="300" height="52" rx="6" fill="#FFFFFF" stroke="#CCD2E0"/>
+<text x="164.0" y="463.0" font-size="13.5" font-weight="600" fill="#181D2B" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>6. 作为 RAG 中台被集成</text>
+<text x="164.0" y="481.0" font-size="11.5" font-weight="400" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>OpenAI 兼容接口、MCP、SDK</text>
+<path d="M142 462 L148 466 L142 470" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M464 462 L470 466 L464 470" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M828 462 L834 466 L828 470" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<rect x="8.0" y="454.0" width="54.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="35.0" y="470.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>开发者</text>
+<rect x="484.0" y="454.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="517.0" y="470.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>开放接口</text>
+<rect x="558.0" y="454.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="591.0" y="470.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>团队共享</text>
+<rect x="848.0" y="454.0" width="125.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="910.5" y="470.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>第三方 Agent 平台</text>
+<rect x="0" y="508" width="1040" height="72" rx="8" fill="#F6F7FA"/>
+<rect x="152" y="518" width="300" height="52" rx="6" fill="#FFFFFF" stroke="#CCD2E0"/>
+<text x="164.0" y="541.0" font-size="13.5" font-weight="600" fill="#181D2B" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>7. 平台运维</text>
+<text x="164.0" y="559.0" font-size="11.5" font-weight="400" fill="#59627A" text-anchor="start" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>用户启停、服务状态、沙箱配置</text>
+<path d="M142 540 L148 544 L142 548" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M464 540 L470 544 L464 548" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<path d="M828 540 L834 544 L828 548" fill="none" stroke="#59627A" stroke-width="1.4"/>
+<rect x="8.0" y="532.0" width="78.0" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="47.0" y="548.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>系统管理员</text>
+<rect x="484.0" y="532.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="517.0" y="548.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>管理后台</text>
+<rect x="558.0" y="532.0" width="66.0" height="24" rx="12" fill="#EEF1FE" stroke="#3B51D4"/><text x="591.0" y="548.5" font-size="12" font-weight="400" fill="#3B51D4" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>单点登录</text>
+<rect x="848.0" y="532.0" width="87.6" height="24" rx="12" fill="#FFFFFF" stroke="#CCD2E0"/><text x="891.8" y="548.5" font-size="12" font-weight="400" fill="#181D2B" text-anchor="middle" font-family='-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'>身份源 OIDC</text></svg>

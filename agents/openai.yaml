@@ -1,0 +1,4 @@
+interface:
+  display_name: "开源项目拆解"
+  short_description: "逐层拆解 GitHub 开源项目，输出选型评估、需求响应矩阵和图文报告"
+  default_prompt: "使用 $repo-dissect 拆解这个 GitHub 项目，目标是选型评估，并生成 report.html。"

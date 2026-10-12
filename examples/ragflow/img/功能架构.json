@@ -1,0 +1,211 @@
+{
+ "title": "RAGFlow 功能架构：五层，企业级管控能力在开源版缺失",
+ "layers": [
+  {
+   "name": "用户入口",
+   "groups": [
+    {
+     "modules": [
+      {
+       "name": "Web 工作台"
+      },
+      {
+       "name": "分享页 / 嵌入组件"
+      },
+      {
+       "name": "管理后台"
+      },
+      {
+       "name": "开放接口",
+       "sub": "API · SDK · MCP"
+      },
+      {
+       "name": "IM 机器人",
+       "sub": "飞书 · 企微 · 钉钉",
+       "status": "beta"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "应用功能",
+   "groups": [
+    {
+     "modules": [
+      {
+       "name": "知识库管理",
+       "status": "focus"
+      },
+      {
+       "name": "聊天助手",
+       "status": "focus"
+      },
+      {
+       "name": "搜索应用"
+      },
+      {
+       "name": "智能体工作流"
+      },
+      {
+       "name": "数据管道"
+      },
+      {
+       "name": "文件管理"
+      },
+      {
+       "name": "记忆",
+       "status": "beta"
+      },
+      {
+       "name": "Skills 空间",
+       "tag": "仅 Go"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "平台能力",
+   "groups": [
+    {
+     "modules": [
+      {
+       "name": "文档深度解析",
+       "sub": "14 种切片方法",
+       "status": "focus"
+      },
+      {
+       "name": "混合检索与重排",
+       "status": "focus"
+      },
+      {
+       "name": "知识编译",
+       "sub": "Wiki · 图谱 · 树",
+       "status": "beta"
+      },
+      {
+       "name": "模型接入",
+       "sub": "74 家厂商"
+      },
+      {
+       "name": "数据源同步",
+       "sub": "38 类连接器"
+      },
+      {
+       "name": "代码沙箱"
+      },
+      {
+       "name": "团队共享",
+       "sub": "仅 我 / 团队 两档"
+      },
+      {
+       "name": "单点登录",
+       "sub": "OAuth2 · OIDC"
+      }
+     ]
+    },
+    {
+     "title": "企业版能力（开源版只有占位接口）",
+     "dashed": true,
+     "modules": [
+      {
+       "name": "角色权限 RBAC",
+       "status": "ee"
+      },
+      {
+       "name": "操作审计",
+       "status": "ee"
+      },
+      {
+       "name": "敏感词过滤",
+       "status": "ee"
+      },
+      {
+       "name": "监控大盘",
+       "status": "ee"
+      },
+      {
+       "name": "License 授权",
+       "status": "ee"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "数据存储",
+   "groups": [
+    {
+     "modules": [
+      {
+       "name": "元数据库",
+       "sub": "MySQL · PG · GaussDB · OB"
+      },
+      {
+       "name": "文档引擎",
+       "sub": "ES · Infinity · OpenSearch"
+      },
+      {
+       "name": "对象存储",
+       "sub": "MinIO · S3 · OSS"
+      },
+      {
+       "name": "缓存与队列",
+       "sub": "Redis"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "基础设施",
+   "groups": [
+    {
+     "modules": [
+      {
+       "name": "Docker Compose"
+      },
+      {
+       "name": "Helm（K8s）"
+      },
+      {
+       "name": "Nginx 网关"
+      },
+      {
+       "name": "外部模型服务",
+       "sub": "LLM · 向量 · 重排"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "legend": [
+  [
+   "box",
+   "focus",
+   "核心能力"
+  ],
+  [
+   "box",
+   null,
+   "已具备"
+  ],
+  [
+   "box",
+   "ee",
+   "企业版，开源版缺失"
+  ],
+  [
+   "pill",
+   "实验性",
+   "新功能"
+  ],
+  [
+   "pill",
+   "仅 Go",
+   "默认部署不可用"
+  ]
+ ]
+}

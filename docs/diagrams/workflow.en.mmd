@@ -1,0 +1,16 @@
+%%{init: {"theme": "base", "fontFamily": "-apple-system, Segoe UI, PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif", "themeVariables": {"fontSize": "15px", "primaryColor": "#FFFFFF", "primaryBorderColor": "#CCD2E0", "primaryTextColor": "#181D2B", "lineColor": "#59627A", "secondaryColor": "#F6F7FA", "tertiaryColor": "#F6F7FA", "clusterBkg": "#F6F7FA", "clusterBorder": "#F6F7FA", "edgeLabelBackground": "#FFFFFF"}}}%%
+flowchart TB
+  classDef focus fill:#EEF1FE,stroke:#3B51D4,stroke-width:1.6px,color:#2D3FAE
+  A["Input<br/>GitHub link / local repo<br/>goal · scenario · requirements"] --> B["Environment check<br/>clone and pin a commit"]
+  B --> C["L0 Profile"]
+  C --> D{"Worth a<br/>deep dive?"}
+  D -->|No| K["Deliver profile<br/>and verdict"]
+  D -->|Yes| E{"Pick layers<br/>by goal"}
+  E --> F["Business<br/>L1 panorama and features"]
+  E --> G["Technical<br/>L2 architecture · L3 main flow<br/>L4 core modules · L5 reuse"]
+  E --> H["Decision<br/>R selection assessment<br/>Q requirement fit"]
+  F --> I["Code-link verification"]
+  G --> I
+  H --> I
+  I --> J["Diagrams + report.html"]
+  class J focus
