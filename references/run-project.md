@@ -6,8 +6,9 @@ SKILL.md 第 3 节的补充。脚本是 `scripts/run_project.py`，只用 Python
 
 | 命令 | 作用 | 会改动什么 |
 |---|---|---|
-| `plan <OUT>` | 准备项目副本 `run/work`，检查环境，生成决策卡片 `run/plan.md` 和 `run/plan.json` | 只写 `$OUT/run/` |
-| `run <OUT>` | 启动 Docker（需要时）→ 拉镜像 → 启动 → 等就绪 → 截图 → 清理 | 用户已在卡片上同意的那些 |
+| `plan <OUT>` | 只读检查环境和项目，生成决策卡片 `run/plan.md`、`run/plan.json`；没有 `run/pages.json` 时生成截图页面初稿 | 只写 `$OUT/run/` |
+| `prepare <OUT>` | 建项目副本 `run/work` 并生成 `.env`（可选：所在环境有文件授权弹窗时，先在前台执行它） | 只写 `$OUT/run/work` |
+| `run <OUT>` | 建副本（已 `prepare` 过则复用）→ 启动 Docker（需要时）→ 拉镜像 → 启动 → 等就绪 → 截图 → 清理 | 用户已在卡片上同意的那些 |
 | `screenshot <OUT>` | 对正在运行的项目按 `pages.json` 截图 | 只写 `$OUT/img/screens/` |
 | `cleanup <OUT>` | 停止并删除本次的容器、网络、新建的数据卷和项目副本 | 只动项目名 `rd-<仓库名>-<编号>` 下的资源 |
 | `handoff <OUT>` | 生成交给用户电脑上 Agent 的接力指令 `run-locally.md` | 只写 `$OUT/` |
@@ -51,13 +52,15 @@ SKILL.md 第 3 节的补充。脚本是 `scripts/run_project.py`，只用 Python
 | 跑不了，问题在本机（3，`recommend` 为 `recheck`：没装 Docker、磁盘或内存不够） | 我处理好了，重新检查 / 交给另一台电脑 / 只做静态分析 | 重新 `plan`，或 `handoff` |
 | 跑不了，问题在项目本身（3，`recommend` 为 `static`：没有 compose 文件、没有本机架构的镜像） | 只做静态分析 | 需要时按项目文档在容器里手动启动，遵守同样的安全边界 |
 
+检查本身出错时（例如 Agent 的文件沙箱拦截了某个操作），`plan` 也会写出一张卡片：结论"当前环境没能完成运行检查"、原因的白话说明、推荐交接，退出码 3。照常给用户选。
+
 卡片出现"⚠ 这个项目要求较高的主机权限"（特权模式、挂载 docker.sock 或项目以外的本机目录、主机网络等）时，第一个选项会变成"我了解上述权限，在这台机器上运行"，不再标推荐。
 
 用环境的选项式提问工具时，选项文字用上表第二列，卡片正文放在问题说明里；没有这类工具就在回复里贴卡片、列编号选项。
 
 ## 3. pages.json
 
-按 L1 功能清单挑 5–10 个主要页面，名字用"序号-页面名"，会成为截图文件名：
+`plan` 会按前端路由生成一份初稿（Next.js 的 `app/`、`pages/` 目录，React Router / Vue Router 配置里的 `path`，包括 `Routes.Datasets` 这类常量写法；跳过动态路由和登录、安装类页面）。L1 完成后按功能清单修订成 5–10 个能证明主要功能的页面，名字用"序号-页面名"，会成为截图文件名：
 
 ```json
 [
@@ -68,7 +71,7 @@ SKILL.md 第 3 节的补充。脚本是 `scripts/run_project.py`，只用 Python
 ```
 
 - `path` 可以是相对地址，也可以是完整 URL；`wait_ms` 是页面加载后再等多久（默认 1500 毫秒，图表多的页面调大）。
-- 页面地址从前端路由定义里找（如 `web/src/routes.ts`、`router/index.ts`、Next.js 的 `app/` 或 `pages/` 目录），不要猜。
+- 初稿没覆盖的页面，从前端路由定义里找（如 `web/src/routes.ts`、`router/index.ts`、Next.js 的 `app/` 或 `pages/` 目录），不要猜；带参数的详情页（`/datasets/[id]`）要先在列表页里拿到真实 id 再写。
 - 每张截图旁有同名 `.txt`，是页面上的文字；看不了图片时据此判断功能是否存在。
 
 ## 4. 登录
@@ -92,7 +95,7 @@ SKILL.md 第 3 节的补充。脚本是 `scripts/run_project.py`，只用 Python
 | 镜像不存在或需要登录 | 检查项目 `.env` 里的镜像名和版本 |
 | Docker Hub 匿名下载次数用完 | 过一小时再试，或登录 Docker Hub、配置镜像加速 |
 | 已有同名容器 | 先停止并删除那个容器（多半是用户之前部署的同一个项目，要用户确认） |
-| 网络不通或太慢 | 检查网络、代理或镜像加速设置 |
+| 网络不通或太慢 | 检查网络、代理或镜像加速设置（见下方"镜像仓库连不上"） |
 | 容器里找不到要执行的程序 | 镜像版本和 compose 文件不匹配，检查 `.env` 里的镜像版本 |
 
 处理原则：把 `advice` 转告用户；属于用户电脑设置的事（内存上限、关闭其他程序）由用户做，做完说一声再试一次；同一问题最多重试一次，然后转静态分析，在 `index.md` 写明卡在哪。
@@ -106,3 +109,21 @@ SKILL.md 第 3 节的补充。脚本是 `scripts/run_project.py`，只用 Python
 ```
 
 收到这句话的 Agent：结果目录已在本地就在原结果上补；没有就先克隆到 `<输出目录>/src` 并固定到给定 commit、写好 `_vars.sh`，然后从 `plan` 开始，同样只问用户一次。`run/pages.json` 已随结果目录带过去时直接使用。
+
+## 7. 带文件沙箱的 Agent
+
+有的 Agent（如 WorkBuddy）给文件操作加了沙箱：对已存在的目录建目录会报错，`.env` 类文件当作凭证要人工授权，后台任务拿不到授权。脚本的处理：
+
+- 建目录都做了兼容，重复执行 `plan`、`handoff` 不会因目录已存在而失败；
+- `plan` 只读，不复制项目、不生成 `.env`（解析 compose 时直接引用项目自带的 `.env.example`），几秒完成，适合前台执行；
+- 复制副本、生成 `.env` 集中在 `prepare`（`run` 开头也会做）：先在前台执行 `prepare` 完成授权，再把 `run` 放到后台；`.env` 生成失败只记一条日志，不中断；
+- `check_env.py` 的"文件沙箱"一行会提前探测这两类限制。
+
+## 8. 镜像仓库连不上
+
+脚本让 Docker 守护进程自己去查镜像清单来判断仓库能否访问（守护进程的网络和代理可能和 Agent 进程不同），所以卡片上的"访问不了镜像仓库"指的是 Docker 真的拉不下来。常见原因和处理：
+
+- **Mac + OrbStack + 代理软件（如 Clash）**：OrbStack 启动时读取系统代理；代理软件晚于 OrbStack 打开，Docker 就不走代理。先开代理再重启 OrbStack，或固定代理：`orb config set network_proxy socks5://127.0.0.1:<端口>`（改回跟随系统：`orb config set network_proxy auto`）。代理规则需让 `registry-1.docker.io`、`auth.docker.io`、`production.cloudflare.docker.com` 以及项目用到的其他仓库（`ghcr.io`、`quay.io` 等）走代理。
+- **Docker Desktop**：Settings → Resources → Proxies 填代理地址，或在 Docker Engine 配置里加 `registry-mirrors`。
+- **没有代理**：给 Docker 配镜像加速（`registry-mirrors` 只对 Docker Hub 生效，`ghcr.io`、`quay.io` 等仍需代理）。
+- **云端 / 沙箱环境**：出站网络由平台的白名单控制，通常拉不了镜像；直接交给用户电脑上的 Agent。
