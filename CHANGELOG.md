@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.2.1] - 2026-10-13
+
+Fixes from a real run in an agent with a file sandbox (WorkBuddy on macOS, Dify).
+
+### Fixed
+
+- Registry reachability is now checked by the Docker daemon itself (Engine API \`/distribution/<image>/json\` over the local socket) instead of from the agent's process. The daemon may use a different network path — OrbStack follows the macOS system proxy — so the old check could report "registry unreachable" while Docker could pull fine. On a Mac where Docker really can't reach the registry, the card now suggests starting the proxy and restarting OrbStack (or \`orb config set network_proxy\`) and recommends re-checking rather than handing off.
+- `run_project.py` no longer fails when the agent's file sandbox rejects `mkdir` on an existing directory (`PermissionError` EEXIST even with `exist_ok=True`); re-running `plan` and `handoff` works.
+- `plan` is read-only and takes seconds: it no longer copies the project or writes `.env`. Compose files are parsed with the project's own `.env.example` as the variable file; when a service requires `env_file: .env`, parsing happens in a symlink mirror under `run/probe` that is removed afterwards.
+- If `plan` hits an unexpected error, it still writes a decision card (reason in plain language, hand-off recommended) and exits with 3 instead of a traceback.
+- When compose parsing falls back to the regex parser (e.g. the sandbox blocks reading `.env.example`), the card no longer lists images, ports or registries from it — the regex parser cannot tell which profile services are active — and offers "fix and re-check" instead of showing "ready".
+- Cleanup also removes containers, networks and volumes by project label, so a `--keep` stack is cleaned even if the plan or work copy is gone.
+
+### Added
+
+- `run_project.py prepare`: builds the work copy and `.env` on its own, so agents that need interactive file approval can run it in the foreground and put `run` in the background. `run` does the same step first. The copy uses APFS cloning on macOS, skips files the sandbox refuses, and a failed `.env` generation is logged instead of aborting; compose then uses the template for variables.
+- `plan` drafts `run/pages.json` from frontend routes (Next.js `app/` and `pages/`, React Router / Vue Router configs including `Routes.X` constants), skipping dynamic and login/install pages.
+- The decision card lists the images that are missing locally.
+- `check_env.py` probes the two sandbox behaviours (mkdir on an existing directory, `.env` file access) in a temporary directory.
+- `checklinks.py --show` prints the code line each reference points to, for spot-checking references that are in range but point at the wrong line. Lines whose evidence is a command in backticks (`git shortlog …`, `rg -n …`) no longer get the "✅ without reference" hint.
+
 ## [1.2.0] - 2026-10-13
 
 ### Added
