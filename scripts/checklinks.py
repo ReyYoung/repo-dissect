@@ -4,6 +4,7 @@
   python3 checklinks.py <src目录> <owner/repo> <sha> 文件1.md [文件2.md ...]        # GitHub 项目
   python3 checklinks.py <src目录> local <sha> 文件1.md ...                          # 本地仓库
   加 --fix：把 GitHub 项目里写成本地路径的引用（如 `api/app.py:12-30`）改写成固定 commit 的永久链接
+  加 --show：逐条打印每个引用指向的那一行代码，便于抽查"行号在范围内但指错了行"（脚本无法自动判断这类错误）
 
 核验内容:
   1. 永久链接 https://github.com/<owner/repo>/blob/<sha>/<path>#L10-L20：commit 必须是本次固定的 sha，
@@ -14,7 +15,8 @@
   4. 编号开头的分层文档（00-、01-……）一条代码引用都没有 → 报错，不能算核验通过
   5. 占位引用 → 报错：单行引用指向空行、只有括号的行，或文件第 1 行的 import / package / {
      这类文件开头内容——它们只能说明"文件在这"，证明不了结论；请改指到真正证明结论的行
-  6. 提示（不影响退出码）：标了 ✅ 的行里没有行号级代码引用，列出前几处供补证据
+  6. 提示（不影响退出码）：标了 ✅ 的行里没有行号级代码引用，列出前几处供补证据；
+     同一行写了检索或 git 命令作为证据（如 `git shortlog -sn --since=1.year`、`rg -n "mupdf" uv.lock`）的不提示
 对比模式下对每个仓库各运行一次（compare.md 每次都带上）。发现问题时退出码为 1。
 """
 import re
@@ -24,7 +26,8 @@ from urllib.parse import unquote
 
 args = sys.argv[1:]
 FIX = "--fix" in args
-args = [a for a in args if a != "--fix"]
+SHOW = "--show" in args
+args = [a for a in args if a not in ("--fix", "--show")]
 if len(args) < 4:
     sys.exit(__doc__)
 src, repo, sha, files = args[0], args[1], args[2], args[3:]
@@ -47,6 +50,7 @@ PERMA = re.compile(r"https://github\.com/" + (re.escape(repo) if not LOCAL else 
 # `path:10` / `path:10-20` / `path:L10-L20`，写在反引号里；路径要有字母开头的扩展名
 LOCALREF = re.compile(r"(?<!\[)`([A-Za-z0-9_.@+\-/]+\.[A-Za-z][A-Za-z0-9]*):L?(\d+)(?:\s*[-–]\s*L?(\d+))?`")
 FENCE = re.compile(r"^```.*?^```", re.S | re.M)
+CMD_EVIDENCE = re.compile(r"`(?:git|gh|rg|grep|find|ls|wc|tokei|cloc|curl|docker)\s[^`]+`")
 cache = {}
 # 不能当证据的行：空行、只有括号/标点；以及文件第 1 行的 import、package、shebang 等文件开头内容
 TRIVIAL = re.compile(r"^\s*[{}\[\]();,]*\s*$")
@@ -109,7 +113,7 @@ for f in files:
         print(f"{f}: 文件不存在，跳过")
         continue
     body = FENCE.sub(lambda m: " " * len(m.group(0)), text)  # 代码块里的不算引用
-    bad, n = [], 0
+    bad, n, shown = [], 0, []
     for m in PERMA.finditer(body):
         n += 1
         s, path, a, b = m.groups()
@@ -122,6 +126,8 @@ for f in files:
             msg = check_lines(path, a, b) or placeholder(path, a, b)
             if msg:
                 bad.append(f"{msg}: {path}#L{a}")
+            elif SHOW:
+                shown.append(f"{path}#L{a}" + (f"-L{b}" if b else "") + "  │ " + file_lines(path)[int(a) - 1].strip()[:90])
     edits = []
     for m in LOCALREF.finditer(body):
         n += 1
@@ -135,6 +141,8 @@ for f in files:
         if msg:
             bad.append(f"{msg}: {where}")
             continue
+        if SHOW:
+            shown.append(f"{full}:{a}" + (f"-{b}" if b else "") + "  │ " + file_lines(full)[int(a) - 1].strip()[:90])
         if not LOCAL:
             if FIX:
                 rng = f"L{a}" + (f"-L{b}" if b and b != a else "")
@@ -151,7 +159,8 @@ for f in files:
         fixed_total += len(edits)
     # ✅ = 代码事实，应能对到代码行；只提示，不计入问题
     weak = [ln.strip() for ln in body.split("\n")
-            if "✅" in ln and not ("🔍" in ln and "❓" in ln) and not PERMA.search(ln) and not LOCALREF.search(ln)]
+            if "✅" in ln and not ("🔍" in ln and "❓" in ln) and not PERMA.search(ln) and not LOCALREF.search(ln)
+            and not CMD_EVIDENCE.search(ln)]
     name = f.replace("\\", "/").rsplit("/", 1)[-1]
     if n == 0 and re.match(r"\d", name):
         bad.append("没有任何代码引用：分层文档的结论必须对到代码位置（固定 commit 的永久链接或 path:行号）")
@@ -160,8 +169,10 @@ for f in files:
     print(f"{f}: {n} 条引用，{len(bad)} 条有问题" + (f"，已改写 {len(edits)} 条为永久链接" if edits else ""))
     for x in bad:
         print("   ", x)
+    for x in shown:
+        print("    ·", x)
     if weak:
-        print(f"    提示：{len(weak)} 行标了 ✅ 但本行没有行号级代码引用（检索命令、无命中类证据可忽略），其余建议补上出处，例如：")
+        print(f"    提示：{len(weak)} 行标了 ✅ 但本行没有行号级代码引用，也没有写检索 / git 命令作证据，建议补上出处，例如：")
         for ln in weak[:3]:
             print("      ·", ln[:100])
 print(f"合计 {refs_total} 条引用，{bad_total} 条有问题" + (f"，已改写 {fixed_total} 条" if fixed_total else ""))

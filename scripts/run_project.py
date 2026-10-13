@@ -2,6 +2,7 @@
 
 用法（<OUT> 是本次拆解的输出目录，里面有 _vars.sh；代码默认在 <OUT>/src）:
   python3 run_project.py plan       <OUT> [--src 代码目录] [--compose 文件] [--min-cpu 4] [--min-mem 16] [--min-disk 50]
+  python3 run_project.py prepare    <OUT>
   python3 run_project.py run        <OUT> [--timeout-min 25] [--keep] [--pages pages.json] [--login 账号:密码] [--base 地址]
   python3 run_project.py screenshot <OUT> [--pages pages.json] [--login 账号:密码] [--base http://localhost]
   python3 run_project.py cleanup    <OUT>
@@ -9,9 +10,10 @@
   --pages 不写时使用 $OUT/run/pages.json；格式 [{"name": "01-知识库列表", "path": "/knowledge", "wait_ms": 1500}]
   --login 也可用环境变量 RD_LOGIN 传入（避免密码出现在进程列表里）
 
-plan       只检查，不动项目和 Docker：Docker 是否可用/可自动启动、镜像仓库能否访问、内存磁盘、端口、同名容器、
-           ARM 兼容、项目要求的主机权限；在 $OUT/run/work 准备一份项目副本，生成"运行决策卡片"（$OUT/run/plan.md）。
-           退出码 0=可以运行，2=需先处理，3=本环境跑不了
+plan       只读检查，不复制项目、不改项目和 Docker：Docker 是否可用/可自动启动、镜像仓库能否访问、内存磁盘、端口、
+           同名容器、ARM 兼容、项目要求的主机权限；生成"运行决策卡片"（$OUT/run/plan.md），没有 run/pages.json 时
+           按前端路由生成截图页面初稿。退出码 0=可以运行，2=需先处理，3=本环境跑不了（检查本身出错也是 3，并留下卡片）
+prepare    建项目副本和 .env（可选；Agent 有文件授权弹窗时先在前台执行它，run 再放后台）
 run        用户选定"在本机运行"后执行：启动 Docker → 拉镜像 → 启动 → 等就绪 → 截图 → 自动清理（--keep 则保留运行）
 screenshot 对运行中的项目按 pages.json 逐页截图，同时保存页面文字（看不了图片的 Agent 以文字为准）
 cleanup    停止并删除本次启动的容器、网络和本次新建的数据卷，删除项目副本（只动项目名 rd-<仓库名>-<编号> 下的资源）
@@ -52,6 +54,19 @@ def utf8_stdio():
                 pass
 
 
+def ensure_dir(p):
+    """建目录且可重入。有的 Agent 文件沙箱对已存在目录的 mkdir 报 PermissionError(EEXIST)，exist_ok 不起作用"""
+    p = Path(p)
+    if p.is_dir():
+        return p
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        if not p.is_dir():
+            raise
+    return p
+
+
 def sh(cmd, timeout=60, cwd=None):
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=timeout, cwd=cwd)
@@ -76,7 +91,7 @@ def load_vars(out):
 class Log:
     def __init__(self, path):
         self.path = path
-        path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_dir(path.parent)
 
     def __call__(self, msg, echo=True):
         line = f"[{datetime.datetime.now():%H:%M:%S}] {msg}"
@@ -225,7 +240,64 @@ def docker_vm(info):
     return platform.system() != "Linux" or "docker desktop" in os_name or "orbstack" in os_name
 
 
-def registry_reachable(host):
+def docker_socket():
+    """Docker 守护进程的 unix socket 路径（OrbStack / Docker Desktop / Colima / Linux 都是 unix socket）；取不到返回 None"""
+    host = os.environ.get("DOCKER_HOST") or sh(["docker", "context", "inspect", "--format",
+                                                "{{.Endpoints.docker.Host}}"], timeout=10)[1].strip()
+    if host.startswith("unix://") and Path(host[7:]).exists():
+        return host[7:]
+    return None
+
+
+def daemon_api(path, timeout=45):
+    """直接问 Docker 守护进程（只用标准库）。返回 (状态码, 消息)；连不上返回 (None, 原因)"""
+    sock_path = docker_socket()
+    if not sock_path or not hasattr(socket, "AF_UNIX"):
+        return None, "没有可用的 unix socket"
+    import http.client
+
+    class UnixConn(http.client.HTTPConnection):
+        def connect(self):
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.sock.settimeout(timeout)
+            self.sock.connect(sock_path)
+    try:
+        c = UnixConn("localhost", timeout=timeout)
+        c.request("GET", path)
+        r = c.getresponse()
+        body = r.read().decode("utf-8", "replace")
+        msg = (jloads(body, {}) or {}).get("message", body) if body.strip().startswith("{") else body
+        return r.status, str(msg)[:300]
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+def registry_via_daemon(image):
+    """让 Docker 守护进程自己去查镜像清单（GET /distribution/<镜像>/json）。
+    守护进程走的是它自己的网络和代理（例如 OrbStack 跟随系统代理），和 Agent 进程可能不一样——以它为准。
+    True=仓库能连上；False=连不上；None=判断不了"""
+    from urllib.parse import quote
+    host, repo, tag = image_ref(image)
+    ref = ("docker.io" if host == "registry-1.docker.io" else host) + "/" + repo + ("@" if tag.startswith("sha256:") else ":") + tag
+    code, msg = daemon_api(f"/distribution/{quote(ref, safe='')}/json")
+    if code is None:
+        return None
+    if code == 200:
+        return True
+    if re.search(r"dial tcp|i/o timeout|TLS handshake|connection refused|no such host|proxyconnect|context deadline|"
+                 r"connection reset|EOF|Forbidden|server misbehaving|network is unreachable", msg, re.I):
+        return False
+    if re.search(r"unauthorized|not found|denied|manifest unknown|toomanyrequests|authentication required", msg, re.I):
+        return True  # 仓库应答了，只是这个镜像要登录或不存在
+    return None
+
+
+def registry_reachable(host, image=None):
+    """优先让 Docker 守护进程判断（给了 image 且守护进程在运行时），否则从本进程直连 /v2/"""
+    if image and docker_cli():
+        r = registry_via_daemon(image)
+        if r is not None:
+            return r
     code, _, _ = http(f"https://{host}/v2/", timeout=6)
     return code in (200, 401, 403)
 
@@ -262,28 +334,65 @@ def find_compose(src, given=None):
     return pick, others
 
 
-def prepare_work(src, work, log=None, fresh=False):
-    """把项目复制到 $OUT/run/work：容器写入的数据、生成的 .env 都落在副本里，不碰原项目。plan 每次重新复制"""
-    if (work / ".rd-copy-done").is_file() and not fresh:
-        return
+def prepare_work(src, work, tag, log=None):
+    """把项目复制到 $OUT/run/work（运行时才做）：容器写入的数据、生成的 .env 都落在副本里，不碰原项目。
+    同一次 plan（tag 相同）只复制一次；Mac 上用 APFS 克隆（cp -c），几乎不占空间、秒级完成"""
+    mark = work / ".rd-copy-done"
+    try:
+        if mark.is_file() and mark.read_text(encoding="utf-8").strip() == tag:
+            return
+    except OSError:
+        pass
     if work.exists():
         shutil.rmtree(str(work), ignore_errors=True)
-    shutil.copytree(str(src), str(work), symlinks=True, dirs_exist_ok=True,
-                    ignore=lambda d, names: [n for n in names if n in SKIP_COPY])
-    (work / ".rd-copy-done").write_text("1", encoding="utf-8")
+        if work.exists():
+            raise OSError(f"旧的项目副本删不掉（可能有容器写入的管理员文件），请手动删除 {work}")
+    cloned = False
+    if platform.system() == "Darwin":
+        cloned = sh(["cp", "-cR", str(src), str(work)], timeout=600)[0] == 0
+        if not cloned and work.exists():
+            shutil.rmtree(str(work), ignore_errors=True)
+    skipped = []
+    if not cloned:
+        def copy_soft(a, b):  # 个别文件被沙箱拦截（如 .env.example）时跳过，不让整个副本失败
+            try:
+                return shutil.copy2(a, b)
+            except PermissionError:
+                skipped.append(os.path.relpath(a, str(src)))
+                return b
+        shutil.copytree(str(src), str(work), symlinks=True, copy_function=copy_soft,
+                        ignore=lambda d, names: [n for n in names if n in SKIP_COPY])
+    mark.write_text(tag, encoding="utf-8")
     if log:
-        log(f"已准备项目副本：{work}")
+        log(f"已准备项目副本：{work}" + ("（APFS 克隆）" if cloned else "")
+            + (f"；当前环境不允许复制 {len(skipped)} 个文件，已跳过：{'、'.join(skipped[:5])}" if skipped else ""))
 
 
-def prepare_env(compose_dir):
-    """compose 目录没有 .env 而有 .env.example 等模板时，在副本里用模板生成 .env"""
-    if (compose_dir / ".env").exists():
+ENV_TEMPLATES = (".env.example", ".env.sample", "env.example", ".env.template", ".env.dist")
+
+
+def env_template(compose_dir):
+    """compose 目录没有 .env 而有模板时返回模板文件名（只看文件名，不读内容）"""
+    try:
+        if (compose_dir / ".env").exists():
+            return None
+        return next((n for n in ENV_TEMPLATES if (compose_dir / n).is_file()), None)
+    except OSError:
         return None
-    for n in (".env.example", ".env.sample", "env.example", ".env.template", ".env.dist"):
-        if (compose_dir / n).is_file():
-            shutil.copy(str(compose_dir / n), str(compose_dir / ".env"))
-            return n
-    return None
+
+
+def prepare_env(compose_dir, src_dir=None):
+    """在副本里用模板生成 .env。返回 (模板名, 错误)；有的 Agent 沙箱把 .env* 当凭证文件拦截，失败不中断。
+    模板没能复制进副本时，从原项目的同一位置取"""
+    n = env_template(compose_dir) or (env_template(src_dir) if src_dir and not (compose_dir / ".env").exists() else None)
+    if not n:
+        return None, None
+    tpl = compose_dir / n if (compose_dir / n).is_file() else Path(src_dir) / n
+    try:
+        shutil.copy(str(tpl), str(compose_dir / ".env"))
+        return n, None
+    except OSError as e:
+        return n, f"{type(e).__name__}: {e}"
 
 
 def compose_files(plan, out):
@@ -299,9 +408,26 @@ def compose_files(plan, out):
     return files
 
 
-def compose_cmd(plan, out, extra):
+def auto_env_file(plan):
+    """compose 目录没有 .env 时，用项目自带模板做变量替换（只读模板，不生成文件）。
+    这样 plan（读原项目）和 .env 没能生成时的 run 用的是同一套变量"""
+    cdir = Path(plan["compose_work"]).parent
+    try:
+        if (cdir / ".env").exists():
+            return None
+    except OSError:
+        return None
+    for d in [cdir] + ([Path(plan["src"]) / Path(plan["compose_rel"]).parent] if plan.get("src") and plan.get("compose_rel") else []):
+        t = env_template(d)
+        if t:
+            return d / t
+    return None
+
+
+def compose_cmd(plan, out, extra, env_file=None):
+    ef = env_file or auto_env_file(plan)
     return (["docker", "compose", "-p", plan["project"], "--project-directory", str(Path(plan["compose_work"]).parent)]
-            + compose_files(plan, out) + extra)
+            + (["--env-file", str(ef)] if ef else []) + compose_files(plan, out) + extra)
 
 
 def compose_config(plan, out):
@@ -313,6 +439,12 @@ def compose_config(plan, out):
         if isinstance(cfg, dict):
             return cfg, "docker compose config", ""
         err = (e or o).strip()
+        tpl = env_template(Path(plan["compose_work"]).parent)
+        if tpl and re.search(r"env file .* not found|\.env.*no such file", err, re.I):
+            cfg, err2 = config_via_probe(plan, out, tpl)  # 服务里写了 env_file: .env，必须真有这个文件
+            if cfg:
+                return cfg, "docker compose config（按 .env 模板）", ""
+            err = err2 or err
     compose = Path(plan["compose_work"])
     text = compose.read_text(encoding="utf-8", errors="replace")
     services, cur = {}, None
@@ -330,6 +462,37 @@ def compose_config(plan, out):
             if m:
                 services[cur]["ports"].append({"published": m.group(1), "target": int(m.group(2))})
     return {"services": services}, "正则粗解析（结果仅供参考）", err
+
+
+def config_via_probe(plan, out, tpl):
+    """在 $OUT/run/probe 用符号链接镜像出项目目录结构，只在镜像里放一份由模板生成的 .env，再解析 compose。
+    不改原项目、不复制整个项目；解析结果里的镜像路径换回原项目路径"""
+    src, rel_parent = Path(plan["src"]), Path(plan["compose_rel"]).parent
+    probe = out / "run" / "probe"
+    try:
+        if probe.exists():
+            shutil.rmtree(str(probe), ignore_errors=True)
+        cur_s, cur_p = src, ensure_dir(probe)
+        chain = list(rel_parent.parts)
+        while True:
+            nxt = chain[0] if chain else None
+            for entry in cur_s.iterdir():
+                if entry.name == nxt or (nxt is None and entry.name == ".env"):
+                    continue
+                os.symlink(str(entry), str(cur_p / entry.name))
+            if nxt is None:
+                break
+            cur_s, cur_p = cur_s / nxt, ensure_dir(cur_p / nxt)
+            chain.pop(0)
+        shutil.copy(str(cur_s / tpl), str(cur_p / ".env"))
+        code, o, e = sh(compose_cmd(dict(plan, compose_work=str(cur_p / Path(plan["compose_rel"]).name)), out,
+                                    ["config", "--format", "json"]), timeout=90)
+        cfg = jloads(o.replace(str(probe), str(src))) if code == 0 else None
+        return (cfg if isinstance(cfg, dict) else None), ("" if code == 0 else (e or o).strip())
+    except OSError as ex:
+        return None, f"按 .env 模板解析失败（{translate_error(ex)}）"
+    finally:
+        shutil.rmtree(str(probe), ignore_errors=True)
 
 
 def compose_ok():
@@ -526,7 +689,7 @@ def project_name(v, out):
 def cmd_plan(out, args):
     v = load_vars(out)
     rundir = out / "run"
-    rundir.mkdir(exist_ok=True)
+    ensure_dir(rundir)
     old = jloads((rundir / "plan.json").read_text(encoding="utf-8"), {}) if (rundir / "plan.json").is_file() else {}
     src = Path(args.get("src") or old.get("src") or (out / "src")).expanduser().resolve()
     if not src.is_dir():
@@ -560,25 +723,20 @@ def cmd_plan(out, args):
         mac = [o for o in others if re.search(r"mac|arm", o.name, re.I)]
         tip = f"；在这台 Mac 上可能应该用 {show(mac[0])}（用 --compose 指定后重新检查）" if mac and platform.system() == "Darwin" else ""
         notes.append(f"使用 {rel}；另有 {'、'.join(show(o) for o in others[:6])}{tip}")
-    # 项目副本（已有本次项目的容器在运行时不重建副本，免得删掉运行中容器挂载的目录）
+    # plan 只读原项目做分析，不复制；副本在用户选定运行后由 run 建（$OUT/run/work）
     work = rundir / "work"
-    cw = work / rel
+    plan["work"] = str(work)
+    plan["compose_rel"] = str(rel)
+    plan["compose_work"] = str(src / rel)
     running = False
-    if old.get("project") and old.get("compose_work") and docker_cli() and (work / ".rd-copy-done").is_file():
-        running = bool(sh(compose_cmd(dict(old, compose_work=str(cw)), out, ["ps", "-q"]), timeout=30)[1].strip())
+    if old.get("project") and docker_cli() and (work / ".rd-copy-done").is_file():
+        running = bool(sh(compose_cmd(dict(plan, compose_work=str(work / rel)), out, ["ps", "-q"]), timeout=30)[1].strip())
     if running:
         fixes.append(f"上次用 --keep 启动的项目还在运行：先执行 run_project.py cleanup {out}，再重新检查")
-    else:
-        try:
-            prepare_work(src, work, fresh=True)
-        except (shutil.Error, OSError) as e:
-            block(f"准备项目副本失败（{str(e)[:160]}）：可能是上次运行时容器写入的文件属于管理员，手动删除 {work} 后重新检查")
-            return finish_plan(out, plan, blockers, fixes, notes, changes, risks)
-    plan["work"] = str(work)
-    plan["compose_work"] = str(cw)
-    envtpl = prepare_env(cw.parent)
+    changes.append("在 run/work 建一份项目副本，项目从副本运行" + ("（APFS 克隆，几乎不占空间）" if platform.system() == "Darwin" else ""))
+    envtpl = env_template(src / rel.parent)
     if envtpl:
-        changes.append(f"在项目副本里用 {envtpl} 生成 .env（项目默认配置）")
+        changes.append(f"在副本里用项目自带的 {envtpl} 生成 .env（项目默认配置）")
     # Docker
     st = daemon_state() if docker_cli() else "none"
     if st == "none":
@@ -611,19 +769,24 @@ def cmd_plan(out, args):
     if err:
         first = [ln.strip() for ln in err.splitlines() if ln.strip()][:2]
         if re.search(r"env file .* not found|\.env.*no such file", err, re.I):
-            fixes.append("项目缺少 .env 配置文件且没有模板可用：" + "；".join(first))
+            fixes.append(("项目需要 .env 配置文件，按自带模板也没能解析：" if env_template((src / rel).parent)
+                          else "项目缺少 .env 配置文件且没有模板可用：") + "；".join(first))
         elif re.search(r"required variable|is missing a value", err, re.I):
             fixes.append("项目要求先设置环境变量：" + "；".join(first))
         elif st != "none":
             fixes.append("compose 文件解析出错：" + "；".join(first))
+    rough = how.startswith("正则")
+    if rough and st != "none":
+        fixes.append("没能完整解析 compose 文件：主机权限、数据卷、镜像和端口检查都没有做（粗解析分不清哪些服务实际启用），"
+                     "解决上面的问题后重新检查")
     if not services:
         block("compose 文件里没有解析出任何服务", "project")
         return finish_plan(out, plan, blockers, fixes, notes, changes, risks)
     plan["services"] = {}
     for k, s in services.items():
         plan["services"][k] = {"image": s.get("image"), "build": bool(s.get("build")), "ports": port_list(s),
-                               "container_name": s.get("container_name"), "base_images": base_images(s.get("build"), cw.parent)}
-        risks += host_access(k, s, work)
+                               "container_name": s.get("container_name"), "base_images": base_images(s.get("build"), (src / rel).parent)}
+        risks += host_access(k, s, src)
     # 数据卷：已存在的同名卷会被直接使用，清理时不删
     for vk, vv in (cfg.get("volumes") or {}).items():
         vv = vv or {}
@@ -650,7 +813,7 @@ def cmd_plan(out, args):
     mirror = daemon_has_mirror(info) if up else False
     cache = {i["image"]: i for i in old.get("images", []) if i.get("status") == "需下载"}
     imgs, hosts, seen, need_amd64, builds = [], {}, {}, [], []
-    for k, s in plan["services"].items():
+    for k, s in ([] if rough else plan["services"].items()):
         img = s.get("image")
         if s["build"] and not (img and up and local_image(img)):
             builds.append(k)
@@ -659,7 +822,7 @@ def cmd_plan(out, args):
                     continue
                 h = image_ref(b)[0]
                 if h not in hosts:
-                    hosts[h] = registry_reachable(h)
+                    hosts[h] = registry_reachable(h, b if up else None)
             continue
         if not img:
             continue
@@ -676,7 +839,7 @@ def cmd_plan(out, args):
         else:
             host = image_ref(img)[0]
             if host not in hosts:
-                hosts[host] = registry_reachable(host)
+                hosts[host] = registry_reachable(host, img)
             if not hosts[host] and not (mirror and host == "registry-1.docker.io"):
                 item["status"] = "仓库不可访问"
             else:
@@ -692,7 +855,11 @@ def cmd_plan(out, args):
         notes.append(f"{len(builds)} 个服务需要现场构建镜像（{'、'.join(builds)}），耗时较长且需要能下载依赖")
     bad_hosts = sorted(h for h, ok in hosts.items() if not ok and not (mirror and h == "registry-1.docker.io"))
     if bad_hosts:
-        block("访问不了镜像仓库：" + "、".join(bad_hosts) + "（网络受限的云端、沙箱或内网环境常见）", "network")
+        tip = "（网络受限的云端、沙箱或内网环境常见）"
+        if platform.system() == "Darwin" and not plan.get("sandbox"):
+            tip = ("（这是 Docker 自己连不上。用代理软件的：先打开代理再重启 OrbStack / Docker Desktop，"
+                   "或执行 orb config set network_proxy socks5://127.0.0.1:<代理端口>；没有代理的：给 Docker 配镜像加速）")
+        block("访问不了镜像仓库：" + "、".join(bad_hosts) + tip, "network")
     elif not up and st == "down":
         for h in sorted({image_ref(i["image"])[0] for i in imgs}):
             if not registry_reachable(h):
@@ -735,7 +902,7 @@ def cmd_plan(out, args):
         block(f"可用磁盘 {disk} GB，预计需要 {round(need_disk)} GB")
     # 端口
     busy = []
-    for k, s in plan["services"].items():
+    for k, s in ([] if rough else plan["services"].items()):
         for p in s["ports"]:
             if p["published"] and not running and port_busy(p["published"]):
                 who = port_owner(p["published"])
@@ -744,8 +911,22 @@ def cmd_plan(out, args):
         fixes.append("端口被占用：" + "、".join(busy) + "。关掉占用这些端口的程序，或改项目 .env 里的端口后告诉我")
     plan["ports"] = sorted({p["published"] for s in plan["services"].values() for p in s["ports"] if p["published"]}, key=int)
     plan["url"], plan["web"] = web_url(plan["services"])
+    pj = rundir / "pages.json"
+    if pj.is_file():
+        plan["pages"] = "已有 run/pages.json"
+    elif plan["web"]:
+        try:
+            pages, total, hows = guess_pages(src)
+        except Exception:
+            pages, total, hows = [], 0, []
+        if pages:
+            pj.write_text(json.dumps(pages, ensure_ascii=False, indent=1), encoding="utf-8")
+            plan["pages"] = (f"已按前端路由生成截图页面初稿 run/pages.json（{len(pages)} 个，共发现 {total} 个静态路由；"
+                             f"来源：{'、'.join(hows[:3])}），请按功能清单调整")
+        else:
+            plan["pages"] = "没找到前端路由，请按功能清单手写 run/pages.json（不写则只截首页）"
     # Elasticsearch / OpenSearch 需要的内核参数
-    if any(re.search(r"elasticsearch|opensearch", (s.get("image") or "")) for s in plan["services"].values()):
+    if not rough and any(re.search(r"elasticsearch|opensearch", (s.get("image") or "")) for s in plan["services"].values()):
         if docker_vm(info) or (not up and platform.system() != "Linux"):
             plan["sysctl"] = "vm"
             changes.append("把 Docker 虚拟机的内核参数 vm.max_map_count 调到至少 262144（Elasticsearch 的要求；只升不降，重启 Docker 后恢复）")
@@ -786,6 +967,86 @@ def base_images(build, compose_dir):
     return res
 
 
+PAGE_EXT = (".tsx", ".jsx", ".ts", ".js", ".vue", ".svelte")
+ROUTE_EXPR = re.compile(r"""\bpath\s*:\s*(`[^`\n]*`|[^,\n}]+)|<Route\b[^>]*?\bpath=(["'][^"']*["'])""")
+ROUTE_CONST = re.compile(r"""\b(\w+)\s*[=:]\s*["'](/[A-Za-z0-9_\-/]*)["']""")
+
+
+def route_value(expr, consts):
+    """把 '/a'、Routes.A、`${Routes.A}/b`、Routes.A + '/b' 这类写法算成路径；算不出返回 None"""
+    expr = expr.strip().rstrip(";")
+    out = ""
+    for tok in re.findall(r"`[^`]*`|'[^']*'|\"[^\"]*\"|[\w.]+|\+", expr):
+        if tok == "+":
+            continue
+        if tok[0] in "'\"":
+            out += tok[1:-1]
+        elif tok[0] == "`":
+            body = tok[1:-1]
+            for m in re.findall(r"\$\{\s*([\w.]+)\s*\}", body):
+                if m.split(".")[-1] not in consts:
+                    return None
+                body = body.replace("${" + m + "}", consts[m.split(".")[-1]]).replace("${ " + m + " }", consts[m.split(".")[-1]])
+            if "${" in body:
+                return None
+            out += body
+        else:
+            key = tok.split(".")[-1]
+            if key not in consts:
+                return None
+            out += consts[key]
+    return out if out.startswith("/") else None
+
+
+def guess_pages(src, limit=10):
+    """按前端路由推断要截图的页面（初稿）：Next.js app/ 与 pages/ 目录、React Router / Vue Router 的 path 配置。
+    跳过动态路由（[id]、:id）和 API 路由"""
+    found = {}
+
+    def add(path, how):
+        path = "/" + "/".join(x for x in path.split("/") if x)
+        if re.search(r"[\[\]:*]", path) or re.match(r"/(api|_next)(/|$)", path):
+            return
+        found.setdefault(path, how)
+
+    for d, dirs, files in os.walk(str(src)):
+        dirs[:] = [x for x in dirs if x not in SKIP_COPY and not x.startswith(".") and x not in ("dist", "build", "out", "test", "tests", "__tests__", "e2e")]
+        rel = Path(d).relative_to(src)
+        parts = rel.parts
+        if "app" in parts:  # Next.js app router：.../app/<段>/page.tsx
+            for f in files:
+                if f.rsplit(".", 1)[0] == "page" and f.endswith(PAGE_EXT):
+                    segs = parts[len(parts) - parts[::-1].index("app"):]
+                    add("/".join(x for x in segs if not (x.startswith("(") or x.startswith("@"))), "Next.js app 路由")
+        if "pages" in parts:  # Next.js pages router
+            i = len(parts) - parts[::-1].index("pages")
+            for f in files:
+                stem, ext = os.path.splitext(f)
+                if ext in PAGE_EXT and not stem.startswith("_"):
+                    root = src.joinpath(*parts[:i - 1])
+                    if any((root / n).exists() for n in ("next.config.js", "next.config.mjs", "next.config.ts")):
+                        add("/".join(parts[i:] + (() if stem == "index" else (stem,))), "Next.js pages 路由")
+        for f in files:  # React Router / Vue Router 配置（含 Routes.X 这类常量写法）
+            if f.endswith(PAGE_EXT) and re.search(r"rout", f, re.I):
+                try:
+                    text = (Path(d) / f).read_text(encoding="utf-8", errors="replace")[:300000]
+                except OSError:
+                    continue
+                consts = {k: v for k, v in ROUTE_CONST.findall(text) if k != "path"}
+                for m in ROUTE_EXPR.finditer(text):
+                    val = route_value(m.group(1) or m.group(2), consts)
+                    if val:
+                        add(val, "路由配置 " + str(rel / f))
+    aux = re.compile(r"login|signin|sign-in|signup|register|forgot|reset|activate|install|init|oauth|callback|verify|"
+                     r"share|embed|widget|webapp|chatbot|404|error|logout|next|test|demo|preview", re.I)
+    paths = sorted(found, key=lambda x: (0 if x == "/" else 2 if aux.search(x) else 1, x.count("/"), x))
+    pages = []
+    for i, pth in enumerate(paths[:limit]):
+        name = "首页" if pth == "/" else pth.strip("/").split("/")[-1]
+        pages.append({"name": f"{i:02d}-{name}", "path": pth})
+    return pages, len(found), sorted(set(found.values()))
+
+
 def web_url(services):
     """返回 (地址, [服务, 容器端口])；端口随机分配时地址为 None，运行后再解析"""
     best = None
@@ -812,18 +1073,21 @@ def finish_plan(out, plan, blockers, fixes, notes, changes, risks):
     if verdict != "not_here":
         gb_dl = (plan.get("download_gb") or 0) + plan.get("size_unknown", 0) * 1.0
         minutes = int(gb_dl * 1024 / MB_PER_S / 60) + BUILD_MIN * len(plan.get("builds", [])) + START_MIN
+    if plan.get("compose_rel"):
+        plan["compose_work"] = str(Path(plan["work"]) / plan["compose_rel"])
     kinds = {b["kind"] for b in blockers}
     if verdict == "not_here":
         if kinds == {"project"}:
             recommend = "static"  # 项目本身的问题，换台机器也一样
         else:
-            recommend = "handoff" if plan.get("sandbox") or kinds - {"project"} <= {"network"} else "recheck"
+            # 云端 / 沙箱里换不了网络，交给用户电脑；在用户自己电脑上（含镜像仓库连不上），处理后重新检查
+            recommend = "handoff" if plan.get("sandbox") else "recheck"
     else:
         recommend = "run"
     plan.update({"verdict": verdict, "blockers": [b["msg"] for b in blockers], "blocker_kinds": sorted(kinds),
                  "fixes": fixes, "notes": notes, "changes": changes, "risks": risks, "estimate_min": minutes,
                  "recommend": recommend})
-    (out / "run").mkdir(exist_ok=True)
+    ensure_dir(out / "run")
     (out / "run" / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
     card = render_card(plan)
     (out / "run" / "plan.md").write_text(card, encoding="utf-8")
@@ -836,9 +1100,12 @@ def render_card(p):
     name = repo.split("/")[-1] if repo and repo != "local" else (Path(p.get("src") or p.get("out") or "").name or "该项目")
     L = [f"## 运行决策：要把 {name} 跑起来截图吗？", "",
          "截图能把功能清单里只见于代码或文档的功能（🔍 / ❓）用界面坐实为 ✅；不运行也能完成静态分析。", ""]
+    rough = (p.get("parsed_by") or "").startswith("正则")
     head = {"ready": f"**结论：可以在这台机器上运行**（预计 {p['estimate_min']} 分钟）",
             "fix_first": f"**结论：处理完下面 {len(p['fixes'])} 件事后可以运行**（预计 {p['estimate_min']} 分钟）",
             "not_here": "**结论：当前环境跑不起来这个项目**"}[p["verdict"]]
+    if rough and p["verdict"] == "fix_first":
+        head = "**结论：还没能完成检查，处理完下面的事项后重新检查**"
     L += [head, ""]
     for x in p["blockers"]:
         L.append(f"- 无法运行：{x}")
@@ -874,13 +1141,21 @@ def render_card(p):
         unit = {"cpu": ("CPU ≥ ", " 核"), "mem": ("内存 ≥ ", " GB"), "disk": ("磁盘 ≥ ", " GB")}
         reqs = "、".join(unit[k][0] + f"{v:g}" + unit[k][1] for k, v in req.items()) or "文档未写明"
         url = p.get("url") or ("运行后自动识别（端口随机分配）" if p.get("web") else "未识别，运行后只能启动、无法截图")
-        L += ["| 项目 | 情况 |", "|---|---|",
-              f"| 启动方式 | {p.get('compose')}（共 {len(p['services'])} 个服务） |",
-              f"| Docker | {p.get('docker', '—')} |",
-              f"| 镜像 | {uniq} 个：{dl} |",
-              f"| 本机资源 | {res.get('cpu')} 核 / {res.get('mem_gb')} GB 内存 / 可用磁盘 {res.get('disk_gb')} GB；项目要求：{reqs} |",
-              f"| 占用端口 | {'、'.join(p.get('ports') or []) or '无'} |",
-              f"| 访问地址 | {url} |", ""]
+        machine = f"| 本机资源 | {res.get('cpu')} 核 / {res.get('mem_gb')} GB 内存 / 可用磁盘 {res.get('disk_gb')} GB；项目要求：{reqs} |"
+        if rough:  # 粗解析分不清 profiles，服务数、镜像、端口、地址都不可靠，不展示
+            L += ["| 项目 | 情况 |", "|---|---|", f"| 启动方式 | {p.get('compose')} |",
+                  f"| Docker | {p.get('docker', '—')} |", machine, ""]
+        else:
+            L += ["| 项目 | 情况 |", "|---|---|",
+                  f"| 启动方式 | {p.get('compose')}（共 {len(p['services'])} 个服务） |",
+                  f"| Docker | {p.get('docker', '—')} |",
+                  f"| 镜像 | {uniq} 个：{dl} |",
+                  machine,
+                  f"| 占用端口 | {'、'.join(p.get('ports') or []) or '无'} |",
+                  f"| 访问地址 | {url} |"] + ([f"| 截图页面 | {p['pages']} |"] if p.get("pages") else []) + [""]
+        miss = sorted({x["image"] for x in imgs if x.get("status") in ("需下载", "仓库不可访问")})
+        if miss:
+            L += ["本地缺少的镜像：" + "、".join(f"`{m}`" for m in miss[:8]) + (f" 等 {len(miss)} 个" if len(miss) > 8 else ""), ""]
     L += ["**请选择：**", ""]
     if p["verdict"] == "not_here":
         if p["recommend"] == "static":
@@ -890,12 +1165,17 @@ def render_card(p):
                   "它会在你的电脑上给出同样的运行卡片，你再选一次即可",
                   "2. **只做静态分析，跳过运行**：报告里注明未运行验证"]
         else:
-            L += ["1. **我处理好了，重新检查**：按上面「无法运行」处理后选这个（如安装并打开 OrbStack / Docker Desktop、清理磁盘）",
+            L += ["1. **我处理好了，重新检查**：按上面「无法运行」处理后选这个（如打开代理后重启 OrbStack、安装 Docker、清理磁盘）",
                   "2. **交给另一台电脑上的 Agent 运行**：我生成一句接力指令，你发给那台电脑上的 WorkBuddy / Codex / Claude Code",
                   "3. **只做静态分析，跳过运行**：报告里注明未运行验证"]
         return "\n".join(L) + "\n"
     shots = "按功能清单截图" if (p.get("url") or p.get("web")) else "（未识别网页地址，可能无法截图）"
     body = f"拉取镜像、启动、等服务就绪、{shots}，结束后自动停止并删除本次的容器、网络和数据卷（镜像保留）"
+    if rough and p["verdict"] == "fix_first":
+        L += ["1. **我处理好了，重新检查**：按上面处理（例如在前台运行检查并允许读取 .env 模板）后选这个，我会重新出一张完整的卡片",
+              "2. **交给你电脑上的 Agent 运行**：我生成一句接力指令，你发给另一个不受此限制的 Agent",
+              "3. **只做静态分析，跳过运行**"]
+        return "\n".join(L) + "\n"
     if p["verdict"] == "fix_first":
         first = f"1. **我处理好了{'，也接受上述权限' if p.get('risks') else ''}，开始运行**：处理完上面的事项后选这个，我会重新检查一遍再运行；运行时{body}"
     elif p.get("risks"):
@@ -920,6 +1200,7 @@ ADVICE = [
     (r"no matching manifest|exec format error", "镜像没有本机架构版本，需要按 x86 转译运行（脚本会自动处理；若仍失败，说明转译不可用）"),
     (r"pull access denied|manifest unknown|not found: manifest", "镜像不存在或需要登录：检查项目 .env 里的镜像名和版本"),
     (r"Conflict\. The container name|is already in use by container", "已有同名容器：先停止并删除那个容器，或确认不再需要后让我处理"),
+    (r"env file .* not found", "项目需要 .env 配置文件，但没能在副本里生成（当前环境可能拦截 .env 类文件）：在前台执行 run_project.py prepare 授权，或在副本的 compose 目录里手动执行 cp .env.example .env"),
     (r"executable file not found|no such file or directory: unknown", "容器里找不到要执行的程序：多半是镜像版本和 compose 文件不匹配，检查 .env 里的镜像版本"),
     (r"TLS handshake timeout|i/o timeout|connection refused|dial tcp|net/http: request canceled|failed to do request|Forbidden", "下载镜像时网络不通或太慢：检查网络、代理或镜像加速设置"),
     (r"permission denied while trying to connect to the Docker daemon", "当前用户没有权限访问 Docker：把用户加入 docker 组，或用有权限的账号运行"),
@@ -993,6 +1274,43 @@ def raise_map_count(plan, out, log):
             f"调整 vm.max_map_count 失败（{(e or o).strip()[:120]}），继续尝试")
 
 
+def do_prepare(out, plan, log):
+    """建项目副本并生成 .env；返回致命错误说明，没有返回 None"""
+    mark = Path(plan["work"]) / ".rd-copy-done"
+    if mark.is_file() and docker_cli() and sh(["docker", "ps", "-q", "--filter",
+                                               f"label=com.docker.compose.project={plan['project']}"], timeout=30)[1].strip():
+        try:
+            same = mark.read_text(encoding="utf-8").strip() == plan.get("created", "")
+        except OSError:
+            same = False
+        if not same:
+            return f"上次用 --keep 启动的项目还在运行，先执行 run_project.py cleanup {out}"
+    try:
+        prepare_work(Path(plan["src"]), Path(plan["work"]), plan.get("created", ""), log)
+    except (OSError, shutil.Error) as e:
+        return f"准备项目副本失败：{translate_error(e)}"
+    tpl, err = prepare_env(Path(plan["compose_work"]).parent, Path(plan["src"]) / Path(plan["compose_rel"]).parent)
+    if tpl and err:
+        log(f"在副本里用 {tpl} 生成 .env 失败（{err[:120]}）：当前环境可能把 .env 类文件当凭证拦截。"
+            f"项目若启动失败，请在前台运行一次，或手动执行 cp {tpl} .env（在 {Path(plan['compose_work']).parent}）")
+    elif tpl:
+        log(f"已在副本里用 {tpl} 生成 .env")
+    return None
+
+
+def cmd_prepare(out, args):
+    """只建副本和 .env（前台执行，便于 Agent 沙箱弹出文件授权），之后 run 可以放到后台"""
+    plan_p = out / "run" / "plan.json"
+    if not plan_p.is_file():
+        sys.exit("还没有运行计划：先执行 plan")
+    plan = json.loads(plan_p.read_text(encoding="utf-8"))
+    if not plan.get("compose_rel"):
+        sys.exit("plan 里没有启动方式，不需要准备")
+    err = do_prepare(out, plan, Log(out / "run" / "run.log"))
+    if err:
+        sys.exit(err)
+
+
 def cmd_run(out, args):
     plan_p = out / "run" / "plan.json"
     if not plan_p.is_file():
@@ -1032,18 +1350,23 @@ def cmd_run(out, args):
         log("结束（失败）")
         sys.exit(1)
 
+    # 需要文件授权的操作（复制副本、生成 .env）放在最前面，授权弹窗一开始就出现
+    err = do_prepare(out, plan, log)
+    if err:
+        fail(err)
     if not start_daemon(log):
         fail("Docker 没有启动起来", "permission denied while trying to connect to the Docker daemon"
              if daemon_state() == "denied" else "")
-    prepare_work(Path(plan["src"]), Path(plan["work"]), log)
-    prepare_env(Path(plan["compose_work"]).parent)
     if plan.get("need_amd64"):
         write_override(out, plan["need_amd64"])
     info = docker_info()
     builds = set(plan.get("builds") or [])
     missing = [s for s, d in plan["services"].items() if d.get("image") and s not in builds and not local_image(d["image"])]
-    hosts = {image_ref(plan["services"][s]["image"])[0] for s in missing}
-    dead = sorted(h for h in hosts if not registry_reachable(h) and not (daemon_has_mirror(info) and h == "registry-1.docker.io"))
+    hosts = {}
+    for s_ in missing:
+        hosts.setdefault(image_ref(plan["services"][s_]["image"])[0], plan["services"][s_]["image"])
+    dead = sorted(h for h, im in hosts.items() if not registry_reachable(h, im)
+                  and not (daemon_has_mirror(info) and h == "registry-1.docker.io"))
     if dead:
         fail("镜像不在本地，且访问不了镜像仓库：" + "、".join(dead), "dial tcp: i/o timeout")
     if missing:
@@ -1163,7 +1486,7 @@ def screenshot(out, base, pages, login, log):
         log("没有安装 Python playwright，跳过截图（可 pip install playwright && python -m playwright install chromium）")
         return []
     shots_dir = out / "img" / "screens"
-    shots_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(shots_dir)
     done = []
     try:
         with sync_playwright() as p:
@@ -1249,12 +1572,21 @@ def cmd_screenshot(out, args):
 def cleanup(out, plan, log):
     """只删本次项目名下的容器、网络、数据卷。不用 down -v：它会连同 compose 里用 name: 指向的已有数据卷一起删"""
     log("清理：停止并删除本次启动的容器和网络…")
-    # rm -v 只删容器上的匿名卷（镜像里 VOLUME 声明的），不碰有名字的卷
-    sh(compose_cmd(plan, out, ["rm", "--stop", "--force", "-v"]), timeout=300)
-    code, o, e = sh(compose_cmd(plan, out, ["down", "--remove-orphans"]), timeout=300)
-    if code:
-        log(f"停止容器时出错：{(e or o).strip()[-300:]}")
-    _, vo, _ = sh(["docker", "volume", "ls", "-q", "--filter", f"label=com.docker.compose.project={plan['project']}"], timeout=30)
+    lab = f"label=com.docker.compose.project={plan['project']}"
+    if plan.get("compose_work") and Path(plan["compose_work"]).is_file():
+        # rm -v 只删容器上的匿名卷（镜像里 VOLUME 声明的），不碰有名字的卷
+        sh(compose_cmd(plan, out, ["rm", "--stop", "--force", "-v"]), timeout=300)
+        code, o, e = sh(compose_cmd(plan, out, ["down", "--remove-orphans"]), timeout=300)
+        if code:
+            log(f"停止容器时出错：{(e or o).strip()[-300:]}")
+    # 按项目标签兜底（副本已删、plan 不完整时也能清干净）
+    _, co, _ = sh(["docker", "ps", "-aq", "--filter", lab], timeout=30)
+    if co.split():
+        sh(["docker", "rm", "-f", "-v"] + co.split(), timeout=300)
+    _, no, _ = sh(["docker", "network", "ls", "-q", "--filter", lab], timeout=30)
+    if no.split():
+        sh(["docker", "network", "rm"] + no.split(), timeout=120)
+    _, vo, _ = sh(["docker", "volume", "ls", "-q", "--filter", lab], timeout=30)
     vols = [x for x in vo.split() if x]
     if vols:
         code, o, e = sh(["docker", "volume", "rm"] + vols, timeout=120)
@@ -1273,8 +1605,7 @@ def cmd_cleanup(out, args):
     if not plan_p.is_file():
         sys.exit("没有 run/plan.json，不清楚要清理哪个项目")
     plan = json.loads(plan_p.read_text(encoding="utf-8"))
-    if not plan.get("compose_work"):
-        sys.exit("plan 里没有启动方式，没有需要清理的容器")
+    plan.setdefault("project", project_name(load_vars(out), out))
     if not daemon_up():
         sys.exit("Docker 没有运行，没有需要清理的容器")
     cleanup(out, plan, Log(out / "run" / "run.log"))
@@ -1300,14 +1631,14 @@ def cmd_handoff(out, args):
         lines += ["", "要截图的页面（按功能清单整理，放在 run/pages.json，对方 Agent 会直接使用）：", "",
                   "```json", pages.read_text(encoding="utf-8").strip(), "```"]
     text = "\n".join(lines) + "\n"
-    (out / "run").mkdir(exist_ok=True)
+    ensure_dir(out / "run")
     (out / "run-locally.md").write_text(text, encoding="utf-8")
     print(text)
 
 
 # ---------------------------------------------------------------- 入口
 def parse(argv):
-    if len(argv) < 2 or argv[0] not in ("plan", "run", "screenshot", "cleanup", "handoff"):
+    if len(argv) < 2 or argv[0] not in ("plan", "prepare", "run", "screenshot", "cleanup", "handoff"):
         sys.exit(__doc__)
     cmd, out, rest = argv[0], Path(argv[1]).expanduser().resolve(), argv[2:]
     args, i = {}, 0
@@ -1326,10 +1657,57 @@ def parse(argv):
     return cmd, out, args
 
 
+def translate_error(e):
+    """把常见异常翻译成白话（Agent 沙箱、权限、文件缺失）"""
+    fn = getattr(e, "filename", None) or ""
+    if isinstance(e, OSError) and getattr(e, "errno", None) == 17:
+        return f"目录 {fn} 已存在，但当前环境拒绝了对它的操作（常见于带文件沙箱的 Agent）"
+    if isinstance(e, PermissionError) and re.search(r"(^|/)\.?env", str(fn)):
+        return f"当前环境不允许读写 {fn}（.env 类文件常被沙箱当作凭证拦截）：在前台运行以便授权，或手动复制"
+    if isinstance(e, PermissionError):
+        return f"没有权限访问 {fn or '某个文件'}：在前台交互运行以便授权，或改用 handoff 交给用户电脑上的 Agent"
+    if isinstance(e, FileNotFoundError):
+        return f"找不到 {fn}"
+    return f"{type(e).__name__}: {str(e)[:200]}"
+
+
+def plan_failed(out, e):
+    """plan 出意外也要留下一张卡片，退出码按"本环境跑不了"（3）"""
+    msg = translate_error(e)
+    v = load_vars(out)
+    card = "\n".join([f"## 运行决策：{(v.get('REPO') or out.name).split('/')[-1]} 的运行检查没能完成", "",
+                       "**结论：当前环境没能完成运行检查**", "", f"- 原因：{msg}", "",
+                       "**请选择：**", "",
+                       "1. **交给你电脑上的 Agent 运行（推荐）**：我生成一句接力指令，你发给电脑上的 WorkBuddy / Codex / Claude Code",
+                       "2. **只做静态分析，跳过运行**：报告里注明未运行验证", ""])
+    print(card)
+    try:
+        ensure_dir(out / "run")
+        (out / "run" / "plan.md").write_text(card, encoding="utf-8")
+        pj = out / "run" / "plan.json"
+        old = jloads(pj.read_text(encoding="utf-8"), {}) if pj.is_file() else {}
+        keep = {k: old[k] for k in ("project", "src", "work", "compose_rel", "compose_work", "images") if k in old}
+        keep.setdefault("project", project_name(v, out))  # 留着项目名，cleanup 仍能清掉上次 --keep 的容器
+        pj.write_text(json.dumps(dict(keep, verdict="not_here", recommend="handoff", error=msg, blockers=[msg],
+                                      repo=v.get("REPO", ""), sha=v.get("SHA", "")), ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        print("（卡片也没能写入 run/plan.md，以上面的输出为准）")
+    sys.exit(3)
+
+
 def main():
     utf8_stdio()
     cmd, out, args = parse(sys.argv[1:])
-    {"plan": cmd_plan, "run": cmd_run, "screenshot": cmd_screenshot, "cleanup": cmd_cleanup, "handoff": cmd_handoff}[cmd](out, args)
+    fn = {"plan": cmd_plan, "prepare": cmd_prepare, "run": cmd_run, "screenshot": cmd_screenshot,
+          "cleanup": cmd_cleanup, "handoff": cmd_handoff}[cmd]
+    try:
+        fn(out, args)
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except Exception as e:
+        if cmd == "plan":
+            plan_failed(out, e)
+        sys.exit(f"{cmd} 没能完成：{translate_error(e)}")
 
 
 if __name__ == "__main__":

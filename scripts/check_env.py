@@ -96,7 +96,9 @@ else:
     add("docker", False, "未安装", "没有 docker：运行与截图交给用户电脑上的 Agent，或只做静态分析")
 hub = None
 if docker != "none":
-    hub = registry_reachable("registry-1.docker.io") if registry_reachable else reach("https://registry-1.docker.io/v2/")
+    # Docker 在运行时让它自己去连（它可能走系统代理），否则从本进程直连
+    hub = (registry_reachable("registry-1.docker.io", "library/hello-world:latest" if docker == "up" else None)
+           if registry_reachable else reach("https://registry-1.docker.io/v2/"))
     if not hub and docker == "up" and daemon_has_mirror and daemon_has_mirror(docker_info()):
         hub = True
         add("镜像仓库 Docker Hub", True, "直连不通，但 Docker 配了镜像加速或代理，以实际拉取为准")
@@ -117,6 +119,40 @@ cpu, mem = os.cpu_count(), mem_gb()
 free = shutil.disk_usage(os.getcwd()).free / 1024 ** 3
 rows.append(("机器", "·", f"{cpu} 核 / {mem if mem else '?'} GB 内存 / 当前目录可用磁盘 {free:.0f} GB"))
 
+
+def probe_files():
+    """探测 Agent 文件沙箱的两类限制：对已存在目录 mkdir 报错；.env 类文件读写被拦"""
+    import tempfile
+    from pathlib import Path
+    res = {"mkdir": None, "env": None}
+    try:  # 只在系统临时目录里试，不在用户的项目文件夹里留东西
+        d = Path(tempfile.mkdtemp(prefix="rd-probe-"))
+    except OSError as e:
+        return {"mkdir": f"建不了临时目录：{e}", "env": None}
+    try:
+        try:
+            d.mkdir(exist_ok=True)
+        except OSError as e:
+            res["mkdir"] = f"{type(e).__name__}: {e}"
+        try:
+            (d / ".env.example").write_text("RD_PROBE=1\n", encoding="utf-8")
+            shutil.copy(str(d / ".env.example"), str(d / ".env"))
+            (d / ".env").read_text(encoding="utf-8")
+        except OSError as e:
+            res["env"] = f"{type(e).__name__}: {e}"
+    finally:
+        shutil.rmtree(str(d), ignore_errors=True)
+    return res
+
+
+fp = probe_files()
+add("文件沙箱", not (fp["mkdir"] or fp["env"]),
+    "无限制" if not (fp["mkdir"] or fp["env"]) else "；".join(x for x in (
+        "对已存在目录 mkdir 会报错（脚本已兼容）" if fp["mkdir"] else "",
+        ".env 类文件读写被拦" if fp["env"] else "") if x),
+    "文件沙箱拦截 .env 类文件：运行项目前先在前台执行 run_project.py prepare（触发授权），再把 run 放到后台；"
+    "仍不行就交给用户电脑上的 Agent" if fp["env"] else None)
+
 def dw(s):  # 显示宽度：中文算 2
     return sum(2 if ord(c) > 0x2E80 else 1 for c in s)
 
@@ -135,4 +171,6 @@ elif docker in ("up", "startable"):
     verdict = "Docker 可用但下载不了镜像：只有镜像已在本地的项目能运行；其余建议交给用户电脑上的 Agent（run_project.py handoff）"
 else:
     verdict = "当前环境跑不了项目，静态分析不受影响；需要运行截图时交给用户电脑上的 Agent（run_project.py handoff）"
+if fp["env"] and docker in ("up", "startable") and hub:
+    verdict += "；注意本环境拦截 .env 类文件，运行前先在前台执行 run_project.py prepare"
 print("运行项目: " + verdict)
