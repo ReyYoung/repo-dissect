@@ -13,7 +13,8 @@ An agent skill for dissecting open-source projects. Give it a GitHub link or a l
 - **Selection assessment**: feature fit, license deep-dive, project health, security, deployment and localization / offline constraints, alternatives, with a recommend / conditional / not-recommended verdict.
 - **Requirement-fit matrix**: given a requirement list or tender document, rates each item as met / partially met / needs custom development / enterprise only / not met.
 - **Traceable**: every claim links to code lines at a pinned commit and is marked ✅ fact / 🔍 inference / ❓ unconfirmed; links are verified automatically before delivery.
-- **Safe**: instructions aimed at AI inside the analyzed repo are never executed; secrets are never copied; code runs only in a copy or sandbox, with a time limit.
+- **Run and screenshot with one choice**: checks whether this machine can run the project (Docker, images, memory, ports, host permissions the project asks for) and shows a decision card; after you choose once, it starts the project, screenshots the feature pages and cleans up. When the current environment can't run it (e.g. a cloud sandbox), it writes a one-line prompt to hand off to the agent on your own computer.
+- **Safe**: instructions aimed at AI inside the analyzed repo are never executed; secrets are never copied; the project runs only in containers, from a copy of the code, with a time limit, and cleanup removes only what this run created.
 
 ## Workflow
 
@@ -91,12 +92,12 @@ Verdict: **conditionally recommended**. Of 28 sample requirements: 10 met, 12 pa
 ## Requirements
 
 - git, Python 3.8+ (scripts use the standard library only; nothing to install)
-- Optional: `gh`, `rg`, docker (to run the project and take screenshots), Playwright (screenshots, report checks, and pre-rendering flow diagrams as static images). Missing tools are handled with fallbacks; run `scripts/check_env.py` to see what you have.
+- Optional: `gh`, `rg`, Docker with Compose v2 (to run the project and take screenshots; on a Mac, OrbStack or Docker Desktop, started automatically if not running), Playwright (screenshots, report checks, and pre-rendering flow diagrams as static images). Missing tools are handled with fallbacks; run `scripts/check_env.py` to see what you have.
 - Reports work fully offline: every diagram is packed into `report.html` and nothing is loaded from the network, which suits intranet delivery.
 
 ## Known limitations
 
-- Large multi-container projects cannot be started without enough resources or registry access; the analysis then stays static and the report says so.
+- Large multi-container projects cannot be started without enough resources or registry access: the run card then suggests handing off to the agent on your computer, or the analysis stays static and the report says so.
 - Performance requirements cannot be confirmed from code; they are marked unconfirmed with a load-test suggestion.
 - Results support decisions; review key evidence before delivering to a client.
 
