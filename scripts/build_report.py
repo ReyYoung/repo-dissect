@@ -9,6 +9,7 @@ Mermaid 图（流程、时序、状态、ER）两种离线方式：
   auto    默认：能用 Playwright 就 static，否则 inline
 """
 import html
+import base64
 import json
 import re
 import sys
@@ -327,6 +328,7 @@ a{color:var(--p600);text-decoration:none}a:hover{text-decoration:underline}
 .side{position:sticky;top:0;height:100vh;overflow:auto;background:#fff;border-right:1px solid var(--card);padding:14px 10px}
 .brand{display:flex;gap:10px;align-items:center;padding:6px 10px 16px}
 .brand .mk{width:30px;height:30px;border-radius:8px;background:var(--p600);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.brand img.logo{width:34px;height:34px;background:none;border-radius:0;object-fit:contain;flex:none}
 .brand b{display:block;font-size:13.5px}.brand small{display:block;font-size:11px;color:var(--weak);font-weight:600;letter-spacing:.04em}
 .side nav{display:flex;flex-direction:column;gap:2px}
 .side nav a{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:7px;color:var(--sub);font-size:13px;text-decoration:none}
@@ -450,10 +452,28 @@ document.querySelector('[data-print]')?.addEventListener('click', () => { docume
 </script>
 """
 
+def data_uri(path):
+    mime = {".png": "image/png", ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".webp": "image/webp", ".ico": "image/x-icon"}.get(path.suffix.lower())
+    if not mime or not path.is_file():
+        return None
+    return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()
+
+
+# 左上角标识：report.json 的 "logo"（相对输出目录的图片路径）优先，否则用技能自带的 repo-dissect 标识；都没有就用文字方块
+BRAND_DIR = Path(__file__).resolve().parent.parent / "assets" / "brand"
+LOGO = data_uri(OUT / CFG["logo"]) if CFG.get("logo") else None
+if CFG.get("logo") and not LOGO:
+    print(f"提示：report.json 的 logo 文件 {CFG['logo']} 不存在或格式不支持（png/svg/jpg/webp），改用默认标识")
+LOGO = LOGO or data_uri(BRAND_DIR / "repo-dissect-mark-96.png")
+FAVICON = (data_uri(OUT / CFG["logo"]) if CFG.get("logo") else None) or data_uri(BRAND_DIR / "repo-dissect-mark-64.png")
+MARK = f'<img class="mk logo" src="{LOGO}" alt="">' if LOGO else '<div class="mk">拆</div>'
+
 page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>{E(CFG['title'])}</title><style>{CSS}</style></head>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{E(CFG['title'])}</title>
+{f'<link rel="icon" href="{FAVICON}">' if FAVICON else ''}<style>{CSS}</style></head>
 <body><div class="layout">
-<aside class="side"><div class="brand"><div class="mk">拆</div><div><b>{E(CFG.get('product', '开源项目拆解'))}</b><small>REPO DISSECT</small></div></div>
+<aside class="side"><div class="brand">{MARK}<div><b>{E(CFG.get('product', '开源项目拆解'))}</b><small>repo-dissect</small></div></div>
 <div class="grp">报告目录</div><nav><a href="#top" data-sec="top"><span class="ico"></span>结论概览</a>{''.join(nav)}</nav></aside>
 <main class="main"><div id="top"></div>
 <div class="crumb">{crumbs}</div>

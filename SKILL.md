@@ -196,7 +196,7 @@ description: 系统拆解 GitHub 开源项目或本地代码库（支持多项�
 - **一图一结论**，图下写「*图 N：结论*」；能不画线就不画线；全图只有一种强调色，状态用虚线框加文字标签；图上用业务语言。
 - **业务全景图、功能架构图**用模板脚本出图（照 `assets/examples/` 写 JSON → `diagrams.py` → SVG），不用 Mermaid；流程、时序、状态、ER、依赖图用 Mermaid 加统一主题。
 - **`report.html` 每次都生成**：照 `assets/examples/report.example.json` 写 `$OUT/report.json`，再运行 `. <OUT>/_vars.sh && python3 "$SKILL_DIR/scripts/build_report.py" "$OUT"`。版式由脚本固定（侧边目录、结论卡片、关键数字、状态标签、图表下载、打印导出），不要手写 HTML。报告是单文件、完全离线可看：Mermaid 图会被预渲染或连同随附的渲染库一起打包；脚本输出里如有"Mermaid 图 N 语法错误"，改正后重新生成。
-- 需要换品牌色：出图加 `--accent '#RRGGBB'`（要加引号），`report.json` 加 `"accent": "#RRGGBB"`。
+- 需要换品牌色：出图加 `--accent '#RRGGBB'`（要加引号），`report.json` 加 `"accent": "#RRGGBB"`。报告左上角默认是 repo-dissect 标识，换成用户自己的：`report.json` 加 `"logo": "<相对输出目录的图片路径>"`（png / svg / jpg，正方形，同时用作浏览器标签图标）。
 
 ## 7. 收尾
 

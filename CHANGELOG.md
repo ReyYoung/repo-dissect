@@ -1,12 +1,22 @@
 # Changelog
 
+## [1.2.2] - 2026-10-13
+
+### Added
+
+- The report sidebar and browser tab show the repo-dissect logo (`assets/brand/`), embedded in `report.html`; `"logo"` in `report.json` replaces it with your own image.
+
+### Fixed
+
+- CHANGELOG: stray backslashes before inline code in the 1.2.1 entry.
+
 ## [1.2.1] - 2026-10-13
 
 Fixes from a real run in an agent with a file sandbox (WorkBuddy on macOS, Dify).
 
 ### Fixed
 
-- Registry reachability is now checked by the Docker daemon itself (Engine API \`/distribution/<image>/json\` over the local socket) instead of from the agent's process. The daemon may use a different network path — OrbStack follows the macOS system proxy — so the old check could report "registry unreachable" while Docker could pull fine. On a Mac where Docker really can't reach the registry, the card now suggests starting the proxy and restarting OrbStack (or \`orb config set network_proxy\`) and recommends re-checking rather than handing off.
+- Registry reachability is now checked by the Docker daemon itself (Engine API `/distribution/<image>/json` over the local socket) instead of from the agent's process. The daemon may use a different network path — OrbStack follows the macOS system proxy — so the old check could report "registry unreachable" while Docker could pull fine. On a Mac where Docker really can't reach the registry, the card now suggests starting the proxy and restarting OrbStack (or `orb config set network_proxy`) and recommends re-checking rather than handing off.
 - `run_project.py` no longer fails when the agent's file sandbox rejects `mkdir` on an existing directory (`PermissionError` EEXIST even with `exist_ok=True`); re-running `plan` and `handoff` works.
 - `plan` is read-only and takes seconds: it no longer copies the project or writes `.env`. Compose files are parsed with the project's own `.env.example` as the variable file; when a service requires `env_file: .env`, parsing happens in a symlink mirror under `run/probe` that is removed afterwards.
 - If `plan` hits an unexpected error, it still writes a decision card (reason in plain language, hand-off recommended) and exits with 3 instead of a traceback.
