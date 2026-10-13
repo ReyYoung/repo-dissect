@@ -12,7 +12,9 @@
      路径不完整（如只写文件名）时，若在仓库里唯一匹配就按完整路径核验并提示补全
   3. GitHub 项目里出现本地路径写法 → 报"未写成永久链接"（可用 --fix 自动改写）
   4. 编号开头的分层文档（00-、01-……）一条代码引用都没有 → 报错，不能算核验通过
-  5. 提示（不影响退出码）：标了 ✅ 的行里没有行号级代码引用，列出前几处供补证据
+  5. 占位引用 → 报错：单行引用指向空行、只有括号的行，或文件第 1 行的 import / package / {
+     这类文件开头内容——它们只能说明"文件在这"，证明不了结论；请改指到真正证明结论的行
+  6. 提示（不影响退出码）：标了 ✅ 的行里没有行号级代码引用，列出前几处供补证据
 对比模式下对每个仓库各运行一次（compare.md 每次都带上）。发现问题时退出码为 1。
 """
 import re
@@ -46,13 +48,34 @@ PERMA = re.compile(r"https://github\.com/" + (re.escape(repo) if not LOCAL else 
 LOCALREF = re.compile(r"(?<!\[)`([A-Za-z0-9_.@+\-/]+\.[A-Za-z][A-Za-z0-9]*):L?(\d+)(?:\s*[-–]\s*L?(\d+))?`")
 FENCE = re.compile(r"^```.*?^```", re.S | re.M)
 cache = {}
+# 不能当证据的行：空行、只有括号/标点；以及文件第 1 行的 import、package、shebang 等文件开头内容
+TRIVIAL = re.compile(r"^\s*[{}\[\]();,]*\s*$")
+HEADER = re.compile(r"^\s*(import\s|from\s+\S+\s+import\s|package\s|use\s|require\(|#include|#!|<\?xml|['\"]use strict['\"])")
+
+
+def file_lines(path):
+    if path not in cache:
+        rr = subprocess.run(["git", "-C", src, "show", f"{sha}:{path}"], capture_output=True)
+        cache[path] = None if rr.returncode else rr.stdout.decode("utf-8", "replace").split("\n")
+        if cache[path] and cache[path][-1] == "":
+            cache[path].pop()
+    return cache[path]
 
 
 def nlines(path):
-    if path not in cache:
-        rr = subprocess.run(["git", "-C", src, "show", f"{sha}:{path}"], capture_output=True)
-        cache[path] = None if rr.returncode else rr.stdout.count(b"\n") + (0 if rr.stdout.endswith(b"\n") else 1)
-    return cache[path]
+    ls = file_lines(path)
+    return None if ls is None else len(ls)
+
+
+def placeholder(full, a, b):
+    """单行引用指向不能当证据的行时，返回说明"""
+    if b and int(b) != int(a):
+        return ""
+    a = int(a)
+    line = file_lines(full)[a - 1]
+    if TRIVIAL.match(line) or (a == 1 and HEADER.match(line)):
+        return f"占位引用（只指向「{line.strip()[:40] or '空行'}」，证明不了结论，请改指到真正的证据行）"
+    return ""
 
 
 def resolve(path):
@@ -96,9 +119,9 @@ for f in files:
         elif path not in TREE:
             bad.append(f"文件不存在: {path}")
         elif a:
-            msg = check_lines(path, a, b)
+            msg = check_lines(path, a, b) or placeholder(path, a, b)
             if msg:
-                bad.append(f"{msg}: {path}")
+                bad.append(f"{msg}: {path}#L{a}")
     edits = []
     for m in LOCALREF.finditer(body):
         n += 1
@@ -108,7 +131,7 @@ for f in files:
         if not full:
             bad.append(f"{hint}: {where}")
             continue
-        msg = check_lines(full, a, b)
+        msg = check_lines(full, a, b) or placeholder(full, a, b)
         if msg:
             bad.append(f"{msg}: {where}")
             continue
