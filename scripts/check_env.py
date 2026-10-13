@@ -11,10 +11,19 @@ import urllib.error
 import urllib.request
 
 
+for _s in (sys.stdout, sys.stderr):  # Windows 中文控制台（GBK）打印 ✓ ✗ 会崩
+    if hasattr(_s, "reconfigure"):
+        try:
+            _s.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def run(cmd, timeout=8):
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return r.returncode, (r.stdout or r.stderr).strip().splitlines()[0] if (r.stdout or r.stderr).strip() else ""
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        text = (r.stdout or r.stderr).decode("utf-8", "replace").strip()
+        return r.returncode, text.splitlines()[0] if text else ""
     except Exception as e:  # 命令不存在、超时等
         return -1, type(e).__name__
 
@@ -62,11 +71,38 @@ else:
 add("rg", bool(shutil.which("rg")), "可用" if shutil.which("rg") else "未安装", "没有 rg：用 grep -rn 代替")
 loc = shutil.which("tokei") or shutil.which("cloc")
 add("tokei/cloc", bool(loc), os.path.basename(loc) if loc else "未安装", "没有 tokei/cloc：用 git ls-files 按扩展名统计规模")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.dont_write_bytecode = True
+try:
+    from run_project import daemon_starter, registry_reachable, daemon_state, daemon_has_mirror, docker_info
+except Exception:  # 只装了本脚本时
+    daemon_starter = registry_reachable = daemon_state = daemon_has_mirror = docker_info = None
+docker = "none"  # none / up / startable / stuck
 if shutil.which("docker"):
-    code, _ = run(["docker", "info"], timeout=6)
-    add("docker", code == 0, "可用" if code == 0 else "已安装，守护进程不可用", "docker 不可用：跳过运行与截图（第 3 节），只做静态分析")
+    st = daemon_state() if daemon_state else ("up" if run(["docker", "info"], timeout=10)[0] == 0 else "down")
+    if st == "up":
+        docker = "up"
+        add("docker", True, "可用")
+    elif st == "denied":
+        docker = "stuck"
+        add("docker", False, "已安装，当前用户没有权限访问", "没有 Docker 权限：把用户加入 docker 组，或运行与截图交给用户电脑上的 Agent")
+    else:
+        name, cmd = daemon_starter() if daemon_starter else ("", None)
+        docker = "startable" if cmd else "stuck"
+        add("docker", bool(cmd), f"已安装，未运行；运行项目时可自动启动（{name}）" if cmd else
+            f"已安装，守护进程未运行" + (f"，且无法自动启动：{name}" if name else ""),
+            "Docker 无法自动启动：运行与截图交给用户电脑上的 Agent，或只做静态分析")
 else:
-    add("docker", False, "未安装", "没有 docker：跳过运行与截图（第 3 节），只做静态分析")
+    add("docker", False, "未安装", "没有 docker：运行与截图交给用户电脑上的 Agent，或只做静态分析")
+hub = None
+if docker != "none":
+    hub = registry_reachable("registry-1.docker.io") if registry_reachable else reach("https://registry-1.docker.io/v2/")
+    if not hub and docker == "up" and daemon_has_mirror and daemon_has_mirror(docker_info()):
+        hub = True
+        add("镜像仓库 Docker Hub", True, "直连不通，但 Docker 配了镜像加速或代理，以实际拉取为准")
+    else:
+        add("镜像仓库 Docker Hub", hub, "可访问" if hub else "不可访问",
+            "访问不了 Docker Hub：只有镜像已在本地时才能运行项目，否则交给用户电脑上的 Agent")
 try:
     import playwright  # noqa: F401
     pw = "Python 包可用"
@@ -93,4 +129,10 @@ if tips:
     print("降级做法:")
     for t in tips:
         print("  -", t)
-print("提示: 运行项目前还要对照它文档里的最低配置（CPU、内存、磁盘），不满足就跳过运行。")
+if docker in ("up", "startable") and hub:
+    verdict = "本机可以运行项目；具体项目还要看内存、磁盘和端口，届时用 run_project.py plan 生成运行决策卡片给用户选"
+elif docker in ("up", "startable"):
+    verdict = "Docker 可用但下载不了镜像：只有镜像已在本地的项目能运行；其余建议交给用户电脑上的 Agent（run_project.py handoff）"
+else:
+    verdict = "当前环境跑不了项目，静态分析不受影响；需要运行截图时交给用户电脑上的 Agent（run_project.py handoff）"
+print("运行项目: " + verdict)
