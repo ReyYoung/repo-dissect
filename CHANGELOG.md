@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1] - 2026-10-13
+
+### Changed
+
+- `checklinks.py` reports placeholder references as problems: a single-line reference that points to a blank line, a bracket-only line, or a file-header line 1 (`import`, `package`, `{`, shebang). Such references show where a file is, not that the claim is true.
+- SKILL.md evidence rule: a reference must point to the lines that prove the claim (definition, config entry, call site, branch); if none can be found, downgrade ✅ to 🔍 or ❓.
+
 ## [1.1.0] - 2026-10-13
 
 ### Changed
@@ -10,6 +17,7 @@
 - A numbered layer document with zero code references now fails the check instead of passing with "0 links, 0 problems".
 - New hint: lines marked ✅ without a line-level code reference are listed for follow-up (does not affect the exit code).
 - `checklinks.py` accepts `local` in place of `owner/repo` for local repositories.
+- Skill lookup also checks `~/.workbuddy/skills`; when only SKILL.md is installed, the agent fetches the scripts by cloning this repository into `~/.cache/repo-dissect-skill`.
 - SKILL.md evidence rules: full paths from the repository root, a code reference on every ✅ line, and a passing check requires exit code 0 with references in every layer document.
 
 ## [1.0.0] - 2026-10-12

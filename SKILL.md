@@ -15,7 +15,7 @@ description: 系统拆解 GitHub 开源项目或本地代码库（支持多项�
 | `references/charts-and-report.md` | 画图前、生成 `report.html` 前 |
 | `scripts/check_env.py` | 开工前自检环境，决定哪些步骤要降级 |
 | `scripts/diagrams.py` | 业务全景图、功能架构图（JSON → SVG） |
-| `scripts/checklinks.py` | 交付前核验全部永久链接 |
+| `scripts/checklinks.py` | 交付前核验全部代码引用（永久链接和 path:行号） |
 | `scripts/build_report.py` | 生成 `report.html` |
 | `assets/examples/*.json` | 出图数据和 `report.json` 的示例，照着写 |
 | `assets/vendor/mermaid.min.js` | Mermaid 渲染库，`build_report.py` 用它离线渲染流程图等，不需要单独调用 |
@@ -56,10 +56,13 @@ description: 系统拆解 GitHub 开源项目或本地代码库（支持多项�
 1. **找到本 skill 的目录**（加载本文件时已知路径就直接用它所在的目录；否则运行下面的查找）：
    ```bash
    for d in ~/.agents/skills/repo-dissect ~/.codex/skills/repo-dissect ~/.claude/skills/repo-dissect \
-            ~/.dsh/skills/repo-dissect ~/.deepcode/skills/repo-dissect; do
+            ~/.workbuddy/skills/repo-dissect ~/.dsh/skills/repo-dissect ~/.deepcode/skills/repo-dissect \
+            ~/.cache/repo-dissect-skill; do
      [ -f "$d/scripts/diagrams.py" ] && echo "$d" && break; done
    ```
    都找不到时，在用户的项目目录下找 `.agents/skills/`、`.claude/skills/`、`.deepcode/skills/`、`.dsh/skills/` 里的 `repo-dissect`。
+   **只装了 SKILL.md、没有 `scripts/` 时**（例如只同步了这一个文件），从发布仓库取完整文件，用它作 `SKILL_DIR`：
+   `git clone --depth 1 https://github.com/ReyYoung/repo-dissect.git ~/.cache/repo-dissect-skill`（已存在就 `git -C ~/.cache/repo-dissect-skill pull`）。
 2. **环境自检**：`python3 <SKILL_DIR>/scripts/check_env.py`，按它列出的"降级做法"调整后续步骤（例如没有 docker 就跳过运行，访问不了 GitHub 就请用户给本地路径）。
 3. **拉代码并固定版本**：
    ```bash
@@ -152,7 +155,7 @@ description: 系统拆解 GitHub 开源项目或本地代码库（支持多项�
 
 **证据**：
 
-1. **固定版本**：所有引用基于第 1 节记录的 `<sha>`。GitHub 项目写永久链接 `[path:L10-L20](https://github.com/<owner>/<repo>/blob/<sha>/path#L10-L20)`；本地仓库写 `path:10-20`。路径一律写从仓库根开始的完整路径，不只写文件名。标 ✅ 的结论，同一行要有对应的代码引用。
+1. **固定版本**：所有引用基于第 1 节记录的 `<sha>`。GitHub 项目写永久链接 `[path:L10-L20](https://github.com/<owner>/<repo>/blob/<sha>/path#L10-L20)`；本地仓库写 `path:10-20`。路径一律写从仓库根开始的完整路径，不只写文件名。标 ✅ 的结论，同一行要有对应的代码引用，而且**引用要指向能证明这句结论的那几行**（定义、配置项、调用处、判断分支），不用文件第 1 行、import 行、空行或只有括号的行占位；找不到能证明的行，就把 ✅ 改成 🔍 或 ❓。
 2. **行号必须有来源**：只能来自本次 `rg -n` / `grep -n` / 带行号读取的实际输出，不凭记忆。写入文档前再核对一次。
 3. 用三类标记区分信息：
    - ✅ 代码事实：直接从代码里读到，或在运行截图中确认
@@ -165,6 +168,7 @@ description: 系统拆解 GitHub 开源项目或本地代码库（支持多项�
    `. <OUT>/_vars.sh && python3 "$SKILL_DIR/scripts/checklinks.py" "$OUT/src" "$REPO" "$SHA" "$OUT"/*.md`（本地仓库把 `"$REPO"` 换成 `local`）。
    - 它核验永久链接和 `path:行号` 两种写法：commit 正确、文件存在、行号不越界；
    - GitHub 项目里写成 `path:行号` 的引用会报"未写成永久链接"，加 `--fix` 可自动改写成永久链接（只写了文件名的，仓库里唯一匹配时一并补全路径）；
+   - 单行引用指向空行、只有括号的行，或文件第 1 行的 import / package / `{` 等文件开头内容，报"占位引用"——这类引用说明不了任何结论，改指到真正的证据行；
    - 编号开头的分层文档一条代码引用都没有，直接报错——**退出码为 0 且每份分层文档都有引用，才算核验通过**，不要把"0 条引用、0 条问题"写成通过；
    - 输出里的"✅ 但本行没有行号级代码引用"是提示，逐条看：能补出处的补上，检索无命中类证据可保留。
    有问题的逐条修正后再交付，`index.md` 里写明引用总数和核验结果。对比模式下对每个仓库各运行一次，`compare.md` 每次都带上。
