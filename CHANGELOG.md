@@ -1,5 +1,69 @@
 # Changelog
 
+English · [简体中文](CHANGELOG.zh-CN.md)
+
+## [1.3.0] - 2026-10-13
+
+Based on feedback from two real runs (Codex on Windows and WorkBuddy + DeepSeek, both on Databuddy) and a review of their reports.
+
+### Added
+
+- `scripts/fetch_repo.py`: gets the source when `git clone` is unavailable or very slow.
+  - Tries, in order: `git clone`, one GitHub archive download (codeload, a single connection), then file-by-file download (jsDelivr, falling back to raw.githubusercontent.com) over reused connections with retries. When the connection is slow (over 5 s per TLS handshake), the archive is tried first.
+  - Every non-git result is checked file by file against the GitHub tree (git blob SHA-1). Files and their hashes are written to `src/.rd-manifest.json`.
+  - Also supports `--only <dir>`, `--dry-run` (file count and size, no download), `--from-archive` for a source ZIP the user downloaded, and resuming an interrupted file-by-file download.
+  - Uses the proxy from the environment, then a direct connection. If neither works, or both are slow, it tries common local proxy ports (Clash 7890/7897 and others) for that command only. A dead git proxy setting (`http.proxy` or a GitHub-specific `http.<url>.proxy`) is overridden per command and never changed; environment proxies are dropped from git's environment when going direct.
+  - Git and archive downloads go to a temporary folder and replace the output folder only on success, so a failed attempt never wipes a partial file-by-file download. Archive paths are checked so nothing is written outside the output folder (including drive letters and reserved names on Windows). Files marked `export-subst` and truncated GitHub tree listings are recorded as not verified instead of failing the check.
+  - `RD_GITHUB_MIRROR` (or `--mirror`) takes a mirror the user trusts; no third-party mirror is built in, and mirror results are verified against the pinned commit.
+  - Certificate checks are never turned off.
+- `check_env.py`:
+  - measures TCP + TLS time to github.com and reports "slow but usable" separately from "unreachable";
+  - reports untrusted certificates with a fix that keeps verification on;
+  - reports a global git proxy or environment proxy that points to a dead port;
+  - finds a working local proxy and suggests using it per command;
+  - adds a final "取代码" line saying whether to use `git clone` or `fetch_repo.py`.
+- `diagrams.py` checks a diagram before writing it and exits with 1 without writing the file. It checks:
+  - limits: layers ≤ 6, modules per layer ≤ 10 (dashed groups counted separately), scenario rows ≤ 8;
+  - whether layer names, module names, subtitles, scene text and chips fit their boxes;
+  - whether every text element stays inside the canvas.
+  `diagrams.py check <json|svg>` runs the checks alone.
+- `run_project.py plan` recognises a compose file that only starts infrastructure (databases, caches, queues, object storage, search) and has no app service or web port. Images are matched on whole names, and an image that is the analyzed project itself does not count. It then says the app has to be installed separately and cannot be screenshotted, instead of "ready". Admin ports of infrastructure (e.g. MinIO on 9000) are no longer taken as the web address.
+- Report:
+  - two closing sections from `report.json`: `pending` (open questions) and `about` (scope, method, production statistics, evidence limits);
+  - a "目录" button at widths up to 1280 px that opens the current chapter's headings, and on phones the chapter list as well;
+  - the active phone tab scrolls into view;
+  - wide tables show a scroll hint and keep the first column fixed;
+  - wide diagrams get a fit-to-width / original-size toggle, fit by default on phones.
+- Analysis rules (SKILL.md, `references/layers.md`):
+  - L2 ends with a table of 5–8 candidate mechanisms (location, why it is distinctive, relevance to the goal, evidence available). L3 and L4 pick from it, and each L4 document lists the important mechanisms it leaves out.
+  - When the user picks a module, they are told what that excludes.
+  - L4 requires six blocks: problem and inputs/outputs, core mechanism, failure boundaries, trade-offs with alternatives and evidence, where it applies, technical debt.
+  - With several goals, the first is primary and the others add only the layers they need.
+  - Conclusion self-check: can the code prove it, is there a counter-example, is an inference written as fact. Absolute wording is avoided.
+  - A fixed open-questions section in `index.md`.
+  - The scale threshold also counts files (> 2000) and download size (> 50 MB). The scale question goes into the same single question as the run card.
+  - Front-page stats show project facts, not production metrics.
+
+### Changed
+
+- `checklinks.py`:
+  - **Paths:** paths containing `( )` and `[ ]` (e.g. Next.js `app/(main)/[id]/page.tsx`) are recognised in both permalinks and `path:line` references. Paths that look truncated are reported.
+  - **Continuation references:** `` `:1234` `` and `` `:120-140` `` reuse the last full path in the same section and are verified; `--fix` expands them to permalinks.
+  - **Archive mode:** a source tree without `.git` is checked through `.rd-manifest.json`, including the commit, with no change to the command. An archive without a recorded commit is accepted with a "version not checked" note.
+  - **False positives:** host names with a port (`github.com:443`) and `` `:8080` `` right after words like 端口 / 监听 / port are no longer read as references; `./path` is resolved correctly.
+  - **L4 blocks:** `04-*` documents missing any of the six required blocks are errors.
+  - **"✅ without reference" hint:** it now also fires when only one condition holds. Headings, table separators, lines with a directory permalink, and lines with command evidence are skipped.
+  - **New hint:** absolute wording (必然, 绝对, 保证, 100% 可靠 …).
+- Report styling:
+  - tag text colours reach at least 5:1 contrast;
+  - small text is at least 11.5 px;
+  - the active nav item carries `aria-current`;
+  - focus outlines are visible;
+  - reduced-motion preferences are respected;
+  - anchors are no longer hidden under the sticky phone navigation;
+  - the print / PDF button stays on phones;
+  - printing from the browser menu also expands collapsed sections and scales wide diagrams to the page.
+
 ## [1.2.2] - 2026-10-13
 
 ### Added

@@ -9,10 +9,11 @@ An agent skill for dissecting open-source projects. Give it a GitHub link or a l
 ## What it does
 
 - **Business view**: target users, usage scenarios, business panorama, feature architecture, and a feature inventory (community vs. enterprise; stable / experimental / deprecated).
-- **Technical view**: modules and layers, core abstractions, main-flow call chain, design trade-offs in core modules, reuse assessment.
+- **Technical view**: modules and layers, core abstractions, main-flow call chain, core-module deep dives (picked from a ranked table of candidate mechanisms; each covers inputs and outputs, the core mechanism, failure boundaries, trade-offs, where it applies, and technical debt), reuse assessment.
 - **Selection assessment**: feature fit, license deep-dive, project health, security, deployment and localization / offline constraints, alternatives, with a recommend / conditional / not-recommended verdict.
 - **Requirement-fit matrix**: given a requirement list or tender document, rates each item as met / partially met / needs custom development / enterprise only / not met.
-- **Traceable**: every claim links to code lines at a pinned commit and is marked ✅ fact / 🔍 inference / ❓ unconfirmed; links are verified automatically before delivery.
+- **Traceable**: every claim links to code lines at a pinned commit and is marked ✅ fact / 🔍 inference / ❓ unconfirmed; links are verified automatically before delivery. Key conclusions are checked against "can the code prove it, is there a counter-example", and anything not confirmed goes into an open-questions list.
+- **Works on a poor connection**: when GitHub is slow or unreachable, the code is fetched as one archive or file by file instead of `git clone`, and every file is verified against the pinned commit. A local proxy is detected and used for that command only; a mirror you configure yourself is supported.
 - **Run and screenshot with one choice**: checks whether this machine can run the project (Docker, images, memory, ports, host permissions the project asks for) and shows a decision card; after you choose once, it starts the project, screenshots the feature pages and cleans up. When the current environment can't run it (e.g. a cloud sandbox), it writes a one-line prompt to hand off to the agent on your own computer.
 - **Safe**: instructions aimed at AI inside the analyzed repo are never executed; secrets are never copied; the project runs only in containers, from a copy of the code, with a time limit, and cleanup removes only what this run created.
 
@@ -93,13 +94,19 @@ Verdict: **conditionally recommended**. Of 28 sample requirements: 10 met, 12 pa
 
 - git, Python 3.8+ (scripts use the standard library only; nothing to install)
 - Optional: `gh`, `rg`, Docker with Compose v2 (to run the project and take screenshots; on a Mac, OrbStack or Docker Desktop, started automatically if not running), Playwright (screenshots, report checks, and pre-rendering flow diagrams as static images). Missing tools are handled with fallbacks; run `scripts/check_env.py` to see what you have.
-- Reports work fully offline: every diagram is packed into `report.html` and nothing is loaded from the network, which suits intranet delivery.
+- Reports work fully offline: every diagram is packed into `report.html` and nothing is loaded from the network, which suits intranet delivery. On a phone, a contents button and horizontally scrolling tables keep long reports readable.
+- GitHub access: a direct connection or a proxy. `check_env.py` measures connection time, checks the certificate and spots dead proxy settings; it never changes your configuration or turns off certificate checks. If you have a GitHub mirror you trust, set `RD_GITHUB_MIRROR`; no third-party mirror is built in. Otherwise use an official mirror of the project on Gitee / GitCode, a source ZIP downloaded in the browser, or a local repository path.
 
 ## Known limitations
 
 - Large multi-container projects cannot be started without enough resources or registry access: the run card then suggests handing off to the agent on your computer, or the analysis stays static and the report says so.
 - Performance requirements cannot be confirmed from code; they are marked unconfirmed with a load-test suggestion.
+- Code fetched as an archive or file by file has no commit history, so hotspot statistics and `git blame` are skipped; design trade-off evidence comes from the GitHub API instead, and the report says so.
 - Results support decisions; review key evidence before delivering to a client.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) ([简体中文](CHANGELOG.zh-CN.md)).
 
 ## License
 

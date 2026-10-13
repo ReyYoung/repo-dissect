@@ -1,6 +1,6 @@
 """repo-dissect 环境自检：列出可用的工具、网络和机器配置，并给出对应的降级做法。
 
-用法: python3 check_env.py            （只用标准库，Python 3.8+，约 10 秒内结束）
+用法: python3 check_env.py            （只用标准库，Python 3.8+，通常 10 秒内结束；GitHub 不通时会多花几秒找本机代理）
 """
 import os
 import platform
@@ -111,9 +111,61 @@ try:
 except ImportError:
     pw = "npx 可用（需能下载浏览器）" if shutil.which("npx") else ""
 add("playwright", bool(pw), pw or "不可用", "没有 Playwright：跳过截图和报告页的浏览器自查，只做脚本检查")
-net_gh = reach("https://github.com")
+# ---- GitHub 连接：建连耗时、证书、失效代理、本机代理
+try:
+    import fetch_repo as fr
+except Exception:
+    fr = None
+fetch_cmd = "python3 <技能目录>/scripts/fetch_repo.py <owner/repo> <ref> \"$OUT/src\""
+gh_state = "ok"  # ok / slow / cert / down
+local_px = None
+dead_cfg = []  # 失效的代理设置：git 配置 / 环境变量
+if fr:
+    gp = fr.git_proxy_config() if shutil.which("git") else None
+    if gp and not fr.proxy_alive(gp[1]):
+        dead_cfg.append("git 配置里的代理")
+        rows.append(("git 代理设置", "✗", f"{gp[0]}={gp[1]} 连不上"))
+        tips.append(f"git 配置里的代理 {gp[1]} 连不上，git clone 会失败。本次可只对单条命令绕开：git -c http.proxy= clone …"
+                    "（fetch_repo.py 会自动这样做）；要不要改全局配置由用户决定，不要擅自修改")
+    ep = fr.env_proxy()
+    if ep and not fr.proxy_alive(ep):
+        dead_cfg.append("环境变量里的代理")
+        rows.append(("环境变量代理", "✗", f"{ep} 连不上"))
+        tips.append(f"环境变量里的代理 {ep} 连不上：本次命令可用 env -u HTTPS_PROXY -u HTTP_PROXY … 临时去掉，或先打开代理软件")
+        ep = None
+    pr = fr.tls_probe("github.com", ep if ep and fr.parse_proxy(ep) else None)
+    if pr["ok"]:
+        gh_state = "slow" if pr["secs"] > fr.SLOW else "ok"
+        add("网络 github.com", True, f"可访问，建连 {pr['secs']:.1f} 秒" + ("（慢）" if gh_state == "slow" else "")
+            + ("，经环境变量代理" if ep else ""))
+        if gh_state == "slow":
+            tips.append(f"连 GitHub 慢但可用（每次建连 {pr['secs']:.0f} 秒）：git clone 可能卡住，取码改用 {fetch_cmd}"
+                        "（单连接整包下载，失败再逐文件下载并校验）")
+    elif pr["cert"] is False:
+        gh_state = "cert"
+        add("网络 github.com", False, f"证书不受信（{pr['error']}）",
+            "GitHub 证书不受信：通常是代理或安全软件在中间替换了证书。请用户把它的根证书导入系统，或关掉该软件的 HTTPS 扫描；"
+            "Windows 上 git 也可试 -c http.sslBackend=openssl。不要关闭证书校验（sslVerify=false）。"
+            "处理好之前请用户提供本地仓库路径或源码 ZIP（fetch_repo.py --from-archive）")
+    else:
+        gh_state = "down"
+        add("网络 github.com", False, f"不可访问（{pr['error'][:60]}）")
+    if gh_state in ("slow", "down"):
+        lp = fr.local_proxies()
+        if lp:
+            url, secs = min(lp, key=lambda x: x[1])
+            local_px = url
+            rows.append(("本机代理", "·", f"{url} 可用，经它建连 {secs:.1f} 秒"))
+            tips.append(f"发现本机代理 {url}：只对单条命令使用即可，例如 HTTPS_PROXY={url} git clone …，"
+                        f"或 fetch_repo.py --proxy {url}（fetch_repo 默认会自动发现）；不需要改全局配置")
+        elif gh_state == "down":
+            tips.append("访问不了 GitHub：请用户打开代理后重试；或设置自己信任的镜像 RD_GITHUB_MIRROR；"
+                        "或看项目在 Gitee / GitCode 有没有官方镜像；或提供本地仓库路径 / 源码 ZIP（fetch_repo.py --from-archive）")
+    net_gh = gh_state in ("ok", "slow")
+else:
+    net_gh = reach("https://github.com")
+    add("网络 github.com", net_gh, "可访问" if net_gh else "不可访问", "访问不了 GitHub：请用户提供本地仓库路径或代码压缩包")
 net_api = reach("https://api.github.com")
-add("网络 github.com", net_gh, "可访问" if net_gh else "不可访问", "访问不了 GitHub：请用户提供本地仓库路径或代码压缩包")
 add("网络 api.github.com", net_api, "可访问" if net_api else "不可访问", "访问不了 GitHub API：社区数据标 ❓，注明未采集")
 cpu, mem = os.cpu_count(), mem_gb()
 free = shutil.disk_usage(os.getcwd()).free / 1024 ** 3
@@ -174,3 +226,12 @@ else:
 if fp["env"] and docker in ("up", "startable") and hub:
     verdict += "；注意本环境拦截 .env 类文件，运行前先在前台执行 run_project.py prepare"
 print("运行项目: " + verdict)
+if local_px:
+    print(f"取代码: 直连{'慢' if gh_state == 'slow' else '不通'}，经本机代理 {local_px} 可用；用 fetch_repo.py 取码（会自动只对本次命令使用该代理）")
+elif dead_cfg and gh_state in ("ok", "slow"):
+    print(f"取代码: GitHub 能连上，但{'和'.join(dead_cfg)}失效，直接 git clone 会失败；用 fetch_repo.py 取码（会自动只对本次命令绕开）")
+else:
+    print("取代码: " + {"ok": "git clone 直接可用（也可用 fetch_repo.py，会自动选最快的方式）",
+                       "slow": "GitHub 慢但可用，用 fetch_repo.py 取码（整包或逐文件，带校验）",
+                       "cert": "证书不受信，先按上面的提示处理；不要关闭证书校验",
+                       "down": "GitHub 不通：开代理、配置 RD_GITHUB_MIRROR，或请用户提供本地路径 / 源码 ZIP"}[gh_state])

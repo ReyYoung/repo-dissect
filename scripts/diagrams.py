@@ -5,6 +5,11 @@ corridor(spec)  -> 业务全景图（按场景成行的"场景走廊"，无交�
 
 用法: python3 diagrams.py <layered|corridor> spec.json out.svg [--accent '#RRGGBB']
      （色值要加引号，否则 shell 会把 # 后面当注释）
+     python3 diagrams.py check <spec.json|图.svg> ...   只做自查，不出图
+
+出图前先按规模和字数上限自查（层数、每层模块数、行数、文字是否超出方框），出图后再检查每段文字是否超出画布；
+有问题时列出来、不写文件、退出码 1。看不了图的环境（没有浏览器）就靠这一步兜底。
+沙箱拒绝带变量的路径时，把路径展开成绝对路径再调用。
 """
 import html
 import re
@@ -178,6 +183,102 @@ def corridor(spec, width=1040):
             '<rect x="0" y="0" width="100%" height="100%" fill="#FFFFFF"/>' + "\n".join(parts) + "</svg>")
 
 
+# ---- 自查 ------------------------------------------------------------------
+LIMITS = {"layers": 6, "mods_per_layer": 10, "rows": 8, "mod_name": 8, "sub": 16, "desc": 20}
+
+
+def nchars(s):
+    """按汉字计的长度：中文 1，西文 0.5"""
+    return sum(1 if ord(c) > 0x2E80 else 0.5 for c in s if not c.isspace())
+
+
+def validate(kind, spec, width=1040):
+    """返回 (errors, warnings)。errors 会让出图失败；warnings 只提示"""
+    err, warn = [], []
+    if not isinstance(spec, dict):
+        return ["数据不是 JSON 对象"], warn
+    if not spec.get("title"):
+        err.append("缺少 title（一句话结论，也用作无障碍标签）")
+    if kind == "layered":
+        layers = spec.get("layers") or []
+        if not layers:
+            err.append("layers 为空")
+        if len(layers) > LIMITS["layers"]:
+            err.append(f"共 {len(layers)} 层，超过上限 {LIMITS['layers']}：合并相近的层，或拆成两张图")
+        LBL, PAD, GAP, BW_MIN = 112, 16, 12, 150
+        inner = width - LBL - PAD * 2
+        cols = max(1, int((inner + GAP) // (BW_MIN + GAP)))
+        bw = (inner - GAP * (cols - 1)) / cols
+        for L in layers:
+            ln = L.get("name", "")
+            if tw(ln, 14) > LBL - 28:
+                err.append(f"层名「{ln}」太长，左侧标签栏放不下（约 6 个汉字以内）")
+            # 虚线分组（企业版等）单独成框，不计入本层主体的模块数
+            main = [m for g in L.get("groups", []) if not g.get("dashed") for m in g.get("modules", [])]
+            if len(main) > LIMITS["mods_per_layer"]:
+                err.append(f"「{ln}」层有 {len(main)} 个模块，超过上限 {LIMITS['mods_per_layer']}：合并相近模块或拆层")
+            for g in L.get("groups", []):
+                if g.get("dashed") and len(g.get("modules", [])) > LIMITS["mods_per_layer"]:
+                    err.append(f"「{ln}」层的分组「{g.get('title', '')}」有 {len(g['modules'])} 个模块，超过上限")
+            for g in L.get("groups", []):
+                if g.get("title") and tw(g["title"], 11.5) > inner:
+                    err.append(f"分组标题「{g['title']}」超出画布")
+                for m in g.get("modules", []):
+                    name, sub = m.get("name", ""), m.get("sub") or ""
+                    if not name:
+                        err.append(f"「{ln}」层有模块缺少 name")
+                    if tw(name, 13) > bw - 4:
+                        err.append(f"模块名「{name}」超出方框（宽 {bw:.0f}px），请缩短")
+                    elif nchars(name) > LIMITS["mod_name"]:
+                        warn.append(f"模块名「{name}」超过 {LIMITS['mod_name']} 个字，建议缩短")
+                    if sub and tw(sub, 11) > bw - 4:
+                        err.append(f"副标题「{sub}」超出方框，请缩短（建议 ≤ {LIMITS['sub']} 个字符）")
+                    pill = m.get("tag") or STATUS.get(m.get("status"), STATUS[None])[2]
+                    if pill and tw(pill, 10) + 16 > bw:
+                        err.append(f"标签「{pill}」比方框还宽")
+    elif kind == "corridor":
+        rows = spec.get("rows") or []
+        if len(spec.get("columns") or []) != 4:
+            err.append("columns 必须正好 4 个列标题")
+        if not rows:
+            err.append("rows 为空")
+        if len(rows) > LIMITS["rows"]:
+            err.append(f"共 {len(rows)} 行场景，超过上限 {LIMITS['rows']}：合并相近场景或拆图")
+        C = [(0, 140), (152, 300), (472, 352), (836, 204)]
+        for i, r in enumerate(rows):
+            scene, desc = f"{i + 1}. {r.get('scene', '')}", r.get("desc", "")
+            if tw(scene, 13.5) > C[1][1] - 24:
+                err.append(f"场景名「{r.get('scene', '')}」超出方框，请缩短")
+            if tw(desc, 11.5) > C[1][1] - 24:
+                err.append(f"场景说明「{desc}」超出方框，请缩短到 {LIMITS['desc']} 字以内")
+            elif nchars(desc) > LIMITS["desc"]:
+                warn.append(f"场景说明「{desc}」超过 {LIMITS['desc']} 字")
+            for key, col, pad in (("role", 0, 16), ("caps", 2, 24), ("ext", 3, 20)):
+                for it in r.get(key, []):
+                    if tw(it, 12) + 18 > C[col][1] - pad:
+                        err.append(f"「{it}」（{key}）比所在列还宽，请缩短")
+    return err, warn
+
+
+TEXT_RE = re.compile(r'<text x="([\d.-]+)" y="([\d.-]+)" font-size="([\d.]+)"[^>]*?text-anchor="(\w+)"[^>]*>([^<]*)</text>')
+
+
+def check_svg(svg):
+    """出图后检查：每段文字按字号估算宽度，看是否超出 viewBox"""
+    m = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
+    if not m:
+        return ["找不到 viewBox，无法检查"]
+    W, H = float(m.group(1)), float(m.group(2))
+    bad = []
+    for x, y, size, anchor, body in TEXT_RE.findall(svg):
+        x, y, size, t = float(x), float(y), float(size), html.unescape(body)
+        w = tw(t, size)
+        left = x - (w / 2 if anchor == "middle" else w if anchor == "end" else 0)
+        if left < -1 or left + w > W + 1 or y > H + 1 or y - size < -1:
+            bad.append(f"文字「{t}」超出画布（{left:.0f}–{left + w:.0f}px，画布宽 {W:.0f}px）")
+    return bad
+
+
 def set_accent(hexv):
     """换品牌色只改这一处：浅底色按 10% 浓度自动推出"""
     h = hexv.lstrip("#")
@@ -190,7 +291,10 @@ def main():
     import json
     import sys
     args = sys.argv[1:]
-    usage = "用法: python3 diagrams.py <layered|corridor> spec.json out.svg [--accent '#RRGGBB']"
+    usage = ("用法: python3 diagrams.py <layered|corridor> spec.json out.svg [--accent '#RRGGBB']\n"
+             "     python3 diagrams.py check <spec.json|图.svg> ...")
+    if args and args[0] == "check":
+        return check_main(args[1:], usage)
     if "--accent" in args:
         i = args.index("--accent")
         val = args[i + 1].lstrip("#") if i + 1 < len(args) else ""
@@ -209,12 +313,66 @@ def main():
     except json.JSONDecodeError as e:
         sys.exit(f"{src} 不是合法 JSON（第 {e.lineno} 行第 {e.colno} 列：{e.msg}）；注意不能带注释和结尾逗号")
     try:
-        svg = {"layered": layered, "corridor": corridor}[kind](spec)
-    except (KeyError, TypeError) as e:
+        err, warn = validate(kind, spec)
+    except (KeyError, TypeError, AttributeError) as e:
         sys.exit(f"{src} 结构不对（{type(e).__name__}: {e}）；对照本 skill 的 assets/examples/{kind}.example.json 修改")
+    for w in warn:
+        print("提示:", w)
+    if err:
+        print(f"{src} 有 {len(err)} 处超出规模或字数上限，未出图：", file=sys.stderr)
+        for e in err:
+            print("  -", e, file=sys.stderr)
+        sys.exit(1)
+    try:
+        svg = {"layered": layered, "corridor": corridor}[kind](spec)
+    except (KeyError, TypeError, AttributeError) as e:
+        sys.exit(f"{src} 结构不对（{type(e).__name__}: {e}）；对照本 skill 的 assets/examples/{kind}.example.json 修改")
+    over = check_svg(svg)
+    if over:
+        print(f"出图后自查发现 {len(over)} 处文字超出画布，未写文件：", file=sys.stderr)
+        for e in over:
+            print("  -", e, file=sys.stderr)
+        sys.exit(1)
     with open(dst, "w", encoding="utf-8") as f:
         f.write(svg)
-    print(dst)
+    print(dst + "（已自查：规模、字数、文字是否超出画布）")
+
+
+def check_main(paths, usage):
+    import json
+    import sys
+    if not paths:
+        sys.exit(usage)
+    bad = 0
+    for pth in paths:
+        try:
+            with open(pth, encoding="utf-8") as f:
+                data = f.read()
+        except OSError as e:
+            print(f"{pth}: 读不了（{e}）")
+            bad += 1
+            continue
+        if pth.lower().endswith(".svg"):
+            err, warn = check_svg(data), []
+        else:
+            try:
+                spec = json.loads(data)
+            except json.JSONDecodeError as e:
+                print(f"{pth}: 不是合法 JSON（第 {e.lineno} 行）")
+                bad += 1
+                continue
+            kind = "layered" if isinstance(spec, dict) and "layers" in spec else "corridor"
+            try:
+                err, warn = validate(kind, spec)
+            except (KeyError, TypeError, AttributeError) as e:
+                err, warn = [f"结构不对（{type(e).__name__}: {e}），对照 assets/examples/{kind}.example.json 修改"], []
+        print(f"{pth}: " + ("通过" if not err else f"{len(err)} 处问题"))
+        for e in err:
+            print("  -", e)
+        for w in warn:
+            print("  提示:", w)
+        bad += len(err)
+    sys.exit(1 if bad else 0)
 
 
 if __name__ == "__main__":

@@ -37,6 +37,14 @@ from pathlib import Path
 COMPOSE_NAMES = ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml")
 OVERRIDE_NAMES = ("docker-compose.override.yml", "docker-compose.override.yaml", "compose.override.yml", "compose.override.yaml")
 WEB_TARGETS = (80, 443, 3000, 8080, 8000, 5000, 5173, 8501, 7860, 9000)
+# 基础设施镜像（数据库、缓存、消息队列、对象存储、搜索、观测）：只有它们时说明应用本身不在 compose 里
+INFRA_IMAGES = ("postgres", "postgresql", "pgvector", "postgis", "timescaledb", "mysql", "mariadb", "redis", "redis-stack",
+                "valkey", "keydb", "dragonfly", "clickhouse", "clickhouse-server", "kafka", "cp-kafka", "redpanda",
+                "zookeeper", "cp-zookeeper", "minio", "elasticsearch", "opensearch", "rabbitmq", "mongo", "mongodb",
+                "nats", "etcd", "memcached", "qdrant", "weaviate", "milvus", "chroma", "influxdb", "cassandra", "scylla",
+                "neo4j", "localstack", "mailhog", "mailpit", "jaeger", "all-in-one", "otel", "opentelemetry-collector",
+                "opentelemetry-collector-contrib", "prometheus", "loki", "tempo", "consul", "vault", "azurite", "pulsar",
+                "typesense", "meilisearch", "kibana")
 SKIP_COPY = {".git", "node_modules", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache", ".next"}
 BUILD_MIN = 10   # 每个需现场构建的服务估 10 分钟
 START_MIN = 5    # 启动估 5 分钟
@@ -723,6 +731,7 @@ def cmd_plan(out, args):
         mac = [o for o in others if re.search(r"mac|arm", o.name, re.I)]
         tip = f"；在这台 Mac 上可能应该用 {show(mac[0])}（用 --compose 指定后重新检查）" if mac and platform.system() == "Darwin" else ""
         notes.append(f"使用 {rel}；另有 {'、'.join(show(o) for o in others[:6])}{tip}")
+        plan["other_compose"] = [show(o) for o in others]
     # plan 只读原项目做分析，不复制；副本在用户选定运行后由 run 建（$OUT/run/work）
     work = rundir / "work"
     plan["work"] = str(work)
@@ -786,6 +795,8 @@ def cmd_plan(out, args):
     for k, s in services.items():
         plan["services"][k] = {"image": s.get("image"), "build": bool(s.get("build")), "ports": port_list(s),
                                "container_name": s.get("container_name"), "base_images": base_images(s.get("build"), (src / rel).parent)}
+        repo_name = (plan.get("repo") or "").rsplit("/", 1)[-1].lower() if plan.get("repo") not in ("", "local") else src.name.lower()
+        plan["services"][k]["infra"] = is_infra(plan["services"][k], repo_name)
         risks += host_access(k, s, src)
     # 数据卷：已存在的同名卷会被直接使用，清理时不删
     for vk, vv in (cfg.get("volumes") or {}).items():
@@ -911,6 +922,13 @@ def cmd_plan(out, args):
         fixes.append("端口被占用：" + "、".join(busy) + "。关掉占用这些端口的程序，或改项目 .env 里的端口后告诉我")
     plan["ports"] = sorted({p["published"] for s in plan["services"].values() for p in s["ports"] if p["published"]}, key=int)
     plan["url"], plan["web"] = web_url(plan["services"])
+    infra = [k for k, s in plan["services"].items() if s.get("infra")]
+    if not rough and infra and len(infra) == len(plan["services"]) and not plan["web"]:
+        plan["infra_only"] = True
+        block(f"这个 compose 文件只有基础设施（{'、'.join(infra[:6])}{' 等' if len(infra) > 6 else ''}），没有应用服务和网页端口："
+              "应用本身要在本机另装依赖后单独启动（见项目 README），脚本无法自动跑起来截图"
+              + (f"。仓库里还有其他 compose 文件（{'、'.join(plan['other_compose'][:3])}），可用 --compose 指定后重新检查"
+                 if plan.get("other_compose") else ""), "project")
     pj = rundir / "pages.json"
     if pj.is_file():
         plan["pages"] = "已有 run/pages.json"
@@ -1047,10 +1065,24 @@ def guess_pages(src, limit=10):
     return pages, len(found), sorted(set(found.values()))
 
 
+def is_infra(s, repo_name=""):
+    """镜像名（去掉仓库、tag）与基础设施名完全相同，或只多一个版本号；被拆的项目本身就是这个镜像时不算"""
+    img = (s.get("image") or "").split("@")[0]
+    last = re.sub(r":[^/]*$", "", img).rsplit("/", 1)[-1].lower()
+    if not img or s.get("build") or not last:
+        return False
+    if len(repo_name) >= 3 and (last == repo_name or last.startswith(repo_name) or repo_name.startswith(last)):
+        return False
+    base = re.sub(r"[-_]?(\d+(\.\d+)*|alpine|slim|latest|community|server|oss|ce)$", "", last)
+    return last in INFRA_IMAGES or base in INFRA_IMAGES
+
+
 def web_url(services):
-    """返回 (地址, [服务, 容器端口])；端口随机分配时地址为 None，运行后再解析"""
+    """返回 (地址, [服务, 容器端口])；端口随机分配时地址为 None，运行后再解析。基础设施的管理端口不算网页"""
     best = None
     for name, s in services.items():
+        if s.get("infra"):
+            continue
         for p in s.get("ports", []):
             tgt = p.get("target") or 0
             if tgt in WEB_TARGETS:
@@ -1106,6 +1138,8 @@ def render_card(p):
             "not_here": "**结论：当前环境跑不起来这个项目**"}[p["verdict"]]
     if rough and p["verdict"] == "fix_first":
         head = "**结论：还没能完成检查，处理完下面的事项后重新检查**"
+    if p.get("infra_only") and p["verdict"] == "not_here":
+        head = "**结论：只有基础设施能启动，应用本身跑不起来，无法截图**"
     L += [head, ""]
     for x in p["blockers"]:
         L.append(f"- 无法运行：{x}")
