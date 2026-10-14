@@ -84,6 +84,49 @@ def _cells(row):
     return cells
 
 
+# ---- 表格列宽：中文能在任意两个字之间换行，浏览器自动分配列宽时会把中文列压成一两个字宽，
+#      所以 3 列以上的表按内容估算每列宽度，用 <colgroup> 定下来（放不下时横向滚动）
+_CJK = re.compile(r"[\u2e80-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]")
+_TOKEN = re.compile(r"[^\s\u2e80-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]+")
+_LINE_EM = {3: 20, 4: 14, 5: 12}  # 每列一行最多放多少个字宽（列越多越窄）
+
+
+def _em(s):
+    return sum(1.0 if _CJK.match(c) else 0.56 for c in s)
+
+
+def _plain(cell):
+    s = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", cell)
+    s = re.sub(r"\[([^\]]+)\]\([^)\s]+\)", r"\1", s)
+    s = re.sub(r"<br\s*/?>", "\n", s)
+    s = s.replace("**", "").replace("`", "")
+    for mark in ("✅", "🔍", "❓"):
+        s = s.replace(mark, "事实")  # 会变成小标签，宽度约两个字
+    return s
+
+
+def _colgroup(head, rows):
+    """返回 (<table ...> 开始标签含 <colgroup>)；少于 3 列返回 None。
+    need：每列至少要多宽（px），want：空间宽裕时希望多宽；页面脚本按实际宽度在两者之间分配，没有脚本时按 need 的比例"""
+    n = len(head)
+    if n < 3:
+        return None
+    line = _LINE_EM.get(n, 9)
+    need, want = [], []
+    for j in range(n):
+        cells = [_plain(r[j]) for r in rows if j < len(r)]
+        longest = max([_em(x) for c in cells for x in c.split("\n")] or [0])
+        token = min(14, max([_em(t) for c in cells for t in _TOKEN.findall(c)] or [0]))
+        head_em = _em(_plain(head[j]))
+        w = max(min(longest, line), token, min(head_em, 8), 2.5)
+        need.append(round(w * 13.5 + 30))  # 按 13.5px 字号估（Windows 上表格字号），左右内边距 28px
+        want.append(round(max(w, min(longest, line * 2.5), min(head_em, 12)) * 13.5 + 30))
+    total = sum(need)
+    cols = "".join(f'<col style="width:{w / total * 100:.1f}%">' for w in need)
+    return (f'<table class="fixed" style="min-width:{total}px" data-need="{",".join(map(str, need))}" '
+            f'data-want="{",".join(map(str, want))}"><colgroup>{cols}</colgroup>')
+
+
 def _list(lines, i):
     m = _LIST.match(lines[i])
     base, ordered = _indent(lines[i]), m.group(2)[0].isdigit()
@@ -150,7 +193,8 @@ def _blocks(lines):
                 j += 1
             th = "".join(f"<th>{_inline(c)}</th>" for c in head)
             trs = "".join("<tr>" + "".join(f"<td>{_inline(c)}</td>" for c in (r + [""] * len(head))[:len(head)]) + "</tr>\n" for r in rows)
-            out.append(f"<table>\n<thead>\n<tr>{th}</tr>\n</thead>\n<tbody>\n{trs}</tbody>\n</table>")
+            open_tag = _colgroup(head, rows) or "<table>"
+            out.append(f"{open_tag}\n<thead>\n<tr>{th}</tr>\n</thead>\n<tbody>\n{trs}</tbody>\n</table>")
             i = j
         elif st.startswith(">"):
             j, q = i, []
@@ -265,7 +309,7 @@ def convert(md_text, sec_id, label):
     body = _retag(body)
     for i, b in enumerate(blocks):
         body = body.replace(f"<p>BLOCK{i}END</p>", b)
-    body = body.replace("<table>", '<div class="table-wrap"><table>').replace("</table>", "</table></div>")
+    body = re.sub(r"<table\b", '<div class="table-wrap"><table', body).replace("</table>", "</table></div>")
     body = re.sub(r"<blockquote>", '<div class="alert info"><span class="dot">i</span><div>', body)
     body = body.replace("</blockquote>", "</div></div>")
     body = re.sub(r'<a href="(https?://[^"]+)"', r'<a href="\1" target="_blank" rel="noopener"', body)
@@ -287,6 +331,8 @@ def convert(md_text, sec_id, label):
 secs, nav = [], []
 for i, s in enumerate(CFG["sections"]):
     fname, label = s[0], s[1]
+    if Path(fname).name.lower() == "index.md":
+        print("提示：index.md 是过程记录，不建议放进报告章节；范围和方法写进 report.json 的 about，待确认事项写进 pending")
     appendix = len(s) > 2 and s[2] == "appendix"
     sid = f"s{i}"
     if not (OUT / fname).is_file():
@@ -344,7 +390,10 @@ CSS = """
 html{scroll-behavior:smooth}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before{transition:none!important;animation:none!important}}
 a:focus-visible,.btn:focus-visible,summary:focus-visible{outline:2px solid var(--p600);outline-offset:2px;border-radius:4px}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.75 -apple-system,"Segoe UI","PingFang SC","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Microsoft YaHei","Noto Sans SC","Source Han Sans SC",sans-serif;font-variant-numeric:tabular-nums}
+/* Windows：多为普通密度屏幕、雅黑小字号偏细，正文放大一号、文字加深（.win 由页头脚本按系统加上） */
+.win body{font-size:15px}.win .sec p,.win .sec li,.win td{color:#2A3040}.win table{font-size:13.5px}.win th{font-size:13px}
+.win .tag.sm{font-size:12px}.win code{font-size:13px}.win .stat .sl,.win .stat .sn,.win .crumb,.win figcaption,.win .anchor{font-size:13px}
 a{color:var(--p600);text-decoration:none}a:hover{text-decoration:underline}
 .layout{display:grid;grid-template-columns:232px minmax(0,1fr) 200px;min-height:100vh}
 /* 侧边导航：宽 232 · 白底右描边 · 当前项强调色浅底 */
@@ -359,7 +408,7 @@ a{color:var(--p600);text-decoration:none}a:hover{text-decoration:underline}
 .side nav a .ico{width:8px;height:8px;border-radius:2.5px;background:var(--weak);flex:none}
 .side nav a.on{background:var(--p50);color:var(--p700);font-weight:600}.side nav a.on .ico{background:var(--p600)}
 .side .grp{font-size:12px;color:var(--weak);font-weight:600;padding:14px 12px 6px}
-.main{padding:24px 40px 80px;min-width:0}
+.main{padding:24px 32px 80px;min-width:0}
 .crumb{font-size:12.5px;color:var(--weak);margin-bottom:10px}.crumb .sep{margin:0 6px;color:var(--ctl)}
 .head{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px}
 h1{font-size:26px;font-weight:700;line-height:1.35;margin:0}
@@ -386,7 +435,7 @@ h1{font-size:26px;font-weight:700;line-height:1.35;margin:0}
 .alert.warn{background:#FCF0DC;border:1px solid #F4D9AE;color:#8A5200}.alert.warn .dot{background:#D17A00}
 .alert.info{background:#F2FAFC;border:1px solid #C5E8EF;color:#3C4356}.alert.info .dot{background:#066A7D}
 .alert p{margin:2px 0}
-.sec{background:#fff;border:1px solid var(--card);border-radius:12px;padding:8px 32px 26px;margin-bottom:16px;scroll-margin-top:calc(var(--navh) + 16px)}
+.sec{background:#fff;border:1px solid var(--card);border-radius:12px;padding:8px 28px 26px;margin-bottom:16px;scroll-margin-top:calc(var(--navh) + 16px)}
 .sec h2{font-size:20px;font-weight:700;line-height:1.4;margin:22px 0 12px;display:flex;align-items:baseline;gap:10px}
 .secno{font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--weak)}
 .sec h3{font-size:16px;font-weight:600;line-height:1.5;margin:26px 0 8px;scroll-margin-top:calc(var(--navh) + 16px)}
@@ -394,8 +443,8 @@ h1{font-size:26px;font-weight:700;line-height:1.35;margin:0}
 #top{scroll-margin-top:calc(var(--navh) + 16px)}
 .sec p,.sec li{color:var(--ink2);overflow-wrap:anywhere}
 .sec strong{color:var(--ink)}
-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--line);color:var(--ink2);padding:1px 5px;border-radius:4px;word-break:break-word}
-pre{background:var(--bg);border:1px solid var(--card);border-radius:8px;padding:12px 14px;overflow-x:auto}pre code{background:none;padding:0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Cascadia Mono","Liberation Mono",monospace;font-size:12.5px;background:var(--line);color:var(--ink2);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Cascadia Mono","Liberation Mono",monospace;background:var(--bg);border:1px solid var(--card);border-radius:8px;padding:12px 14px;overflow-x:auto}pre code{background:none;padding:0}
 .table-wrap{border:1px solid var(--card);border-radius:10px;overflow-x:auto;margin:12px 0 18px;position:relative}
 .scroll-hint{display:none;font-size:12px;color:var(--weak);margin:12px 0 -6px}.scroll-hint.show{display:block}
 .table-wrap.scrollable th:first-child,.table-wrap.scrollable td:first-child{position:sticky;left:0;z-index:1;box-shadow:1px 0 0 var(--card)}
@@ -403,7 +452,8 @@ pre{background:var(--bg);border:1px solid var(--card);border-radius:8px;padding:
 .table-wrap.scrollable tr:hover td:first-child{background:var(--bg)}
 table{border-collapse:collapse;width:100%;font-size:13px;min-width:640px}
 th{background:var(--bg);font-size:12.5px;font-weight:600;color:var(--sub);text-align:left;padding:10px 14px;white-space:nowrap}
-td{padding:10px 14px;border-top:1px solid var(--line);vertical-align:top;color:var(--ink2)}
+td{padding:10px 14px;border-top:1px solid var(--line);vertical-align:top;color:var(--ink2);overflow-wrap:anywhere}
+table.fixed{table-layout:fixed}table.fixed th{white-space:normal}
 tr:hover td{background:var(--bg)}
 figure.diagram{margin:14px 0 20px;border:1px solid var(--card);border-radius:10px;padding:16px;background:#fff}
 .fig-scroll{overflow-x:auto}.fig-scroll svg{min-width:760px;display:block}
@@ -429,7 +479,7 @@ details.collapse.big{border:none;margin:0;padding:0}details.collapse.big>summary
 .anchor a{display:block;padding:5px 0 5px 14px;border-left:2px solid var(--line);color:var(--sub);text-decoration:none;line-height:1.5}
 .anchor a.l4{padding-left:26px}.anchor a.on{border-left-color:var(--p600);color:var(--p600);font-weight:600}
 footer{font-size:12.5px;color:var(--weak);margin-top:24px}
-@media (max-width:1280px){.layout{grid-template-columns:232px minmax(0,1fr)}
+@media (max-width:1499px){.layout{grid-template-columns:232px minmax(0,1fr)}
 .anchor{display:none;position:fixed;top:auto;right:16px;bottom:64px;z-index:8;height:auto;max-height:65vh;width:min(320px,calc(100vw - 32px));background:#fff;border:1px solid var(--card);border-radius:12px;padding:14px 16px;box-shadow:0 8px 28px rgba(24,29,43,.18)}
 .anchor.open{display:block}.toc-btn{display:inline-flex;align-items:center}}
 @media (max-width:860px){.layout{display:block}.side{position:sticky;top:0;z-index:5;height:auto;padding:8px 12px;border-right:none;border-bottom:1px solid var(--card)}
@@ -437,7 +487,7 @@ footer{font-size:12.5px;color:var(--weak);margin-top:24px}
 .main{padding:16px 16px 60px}.verdict{grid-template-columns:1fr}.sec{padding:4px 16px 18px}.card{padding:18px}
 :root{--navh:56px}.head{flex-wrap:wrap}.head .btn{margin-left:0}.anchor .chap{display:block;margin-bottom:12px}
 .anchor .chap a{border-left:none;padding-left:0}h1{font-size:22px}}
-@media print{.side,.anchor,.btn,.figbar,.toc-btn,.scroll-hint{display:none!important}figure.diagram svg{min-width:0!important;max-width:100%!important;width:100%!important;height:auto}table{min-width:0}.table-wrap{overflow:visible}.layout{display:block}.main{padding:0}.sec,.card,.stat{break-inside:auto;border-color:#ddd}body{background:#fff}details.collapse{display:block}}
+@media print{.side,.anchor,.btn,.figbar,.toc-btn,.scroll-hint{display:none!important}figure.diagram svg{min-width:0!important;max-width:100%!important;width:100%!important;height:auto}table{min-width:0!important}.table-wrap{overflow:visible}.layout{display:block}.main{padding:0}.sec,.card,.stat{break-inside:auto;border-color:#ddd}body{background:#fff}details.collapse{display:block}}
 """.replace("__P50__", P50).replace("__P100__", P100).replace("__P600__", ACCENT).replace("__P700__", P700)
 
 JS = r"""
@@ -515,8 +565,24 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') openToc(fa
 // 5) 宽表格：放不下时提示可横向滑动，并固定第一列
 const wraps = [...document.querySelectorAll('.table-wrap')];
 wraps.forEach(w => { const h = document.createElement('div'); h.className = 'scroll-hint'; h.textContent = '表格较宽，可左右滑动查看 →'; w.before(h); });
-const fitTables = () => wraps.forEach(w => { const sc = w.scrollWidth > w.clientWidth + 2; w.classList.toggle('scrollable', sc); w.previousElementSibling.classList.toggle('show', sc); });
+// 3 列以上的表：先保证每列最小宽度（need），多出的空间按内容多少分给需要的列（want）
+const fitCols = () => document.querySelectorAll('table.fixed[data-need]').forEach(t => {
+  const need = t.dataset.need.split(',').map(Number), want = t.dataset.want.split(',').map(Number);
+  const W = t.parentElement.clientWidth - 2, sn = need.reduce((a, b) => a + b, 0), sw = want.reduce((a, b) => a + b, 0);
+  let ws = need;
+  if (W > sn) ws = W >= sw ? want.map(x => x * W / sw) : need.map((x, i) => x + (W - sn) * (want[i] - x) / (sw - sn || 1));
+  t.querySelectorAll('col').forEach((c, i) => { c.style.width = ws[i].toFixed(0) + 'px'; });
+  t.style.width = ws.reduce((a, b) => a + b, 0).toFixed(0) + 'px';
+});
+let printing = false;  // 打印时用按比例的列宽，不按屏幕宽度重排
+const pctCols = () => document.querySelectorAll('table.fixed[data-need]').forEach(t => {
+  const need = t.dataset.need.split(',').map(Number), sn = need.reduce((a, b) => a + b, 0);
+  t.style.width = ''; t.querySelectorAll('col').forEach((c, i) => { c.style.width = (need[i] / sn * 100).toFixed(1) + '%'; });
+});
+const fitTables = () => { if (printing) return; fitCols(); wraps.forEach(w => { const sc = w.scrollWidth > w.clientWidth + 2; w.classList.toggle('scrollable', sc); w.previousElementSibling.classList.toggle('show', sc); }); };
 fitTables(); window.addEventListener('resize', fitTables);
+window.addEventListener('beforeprint', () => { printing = true; pctCols(); });
+window.addEventListener('afterprint', () => { printing = false; setTimeout(fitTables, 0); });
 document.addEventListener('toggle', fitTables, true);
 // 6) 打印：无论点按钮还是直接用浏览器打印，都先展开折叠内容，打印完恢复
 let closed = [];
@@ -544,7 +610,8 @@ FAVICON = (data_uri(OUT / CFG["logo"]) if CFG.get("logo") else None) or data_uri
 MARK = f'<img class="mk logo" src="{LOGO}" alt="">' if LOGO else '<div class="mk">拆</div>'
 
 page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>{E(CFG['title'])}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>if(/Windows/i.test(navigator.userAgent))document.documentElement.classList.add('win')</script><title>{E(CFG['title'])}</title>
 {f'<link rel="icon" href="{FAVICON}">' if FAVICON else ''}<style>{CSS}</style></head>
 <body><div class="layout">
 <aside class="side"><div class="brand">{MARK}<div><b>{E(CFG.get('product', '开源项目拆解'))}</b><small>repo-dissect</small></div></div>
@@ -569,7 +636,7 @@ page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 # ---- Mermaid：预渲染成静态 SVG，或内联渲染库 ----
 # 关闭 HTML 标签，否则导出 PNG 时画布会被浏览器判定为"被污染"而失败；
 # 字体在这里统一设置（Mermaid 不认 themeVariables 里的 fontFamily）
-MERMAID_CFG = '{"startOnLoad": false, "securityLevel": "strict", "htmlLabels": false, "flowchart": {"htmlLabels": false}, "fontFamily": "-apple-system, Segoe UI, PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif"}'
+MERMAID_CFG = '{"startOnLoad": false, "securityLevel": "strict", "htmlLabels": false, "flowchart": {"htmlLabels": false}, "fontFamily": "-apple-system, Segoe UI, PingFang SC, Microsoft YaHei UI, Microsoft YaHei, Noto Sans CJK SC, sans-serif"}'
 
 
 def natural_width(svg):

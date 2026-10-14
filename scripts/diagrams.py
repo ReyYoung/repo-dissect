@@ -26,7 +26,7 @@ T = {  # 设计令牌：中性色 + 一种强调色 + 一种状态色
     "warn": "#A25E00",      # 状态标签文字
     "warn_bg": "#FCF0DC",   # 状态标签浅底
 }
-FONT = '-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif'
+FONT = '-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Noto Sans CJK SC",sans-serif'
 
 
 def tw(s, size):

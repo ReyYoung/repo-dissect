@@ -319,27 +319,48 @@ def daemon_has_mirror(info):
 
 
 # ---------------------------------------------------------------- 代码副本与 compose
+COMPOSE_MAX_DEPTH = 6  # 部署文件可能放得很深，如 document/public/deploy/docker/main/cn/
+SKIP_DIRS = {"node_modules", "vendor", "dist", "build", "target", "out", "coverage", "__pycache__", "venv",
+             "site-packages", "bower_components", "tmp"}
+NOISY = re.compile(r"(^|[-_.])(dev|develop|development|test|tests|testing|ci|e2e|debug|local|example|examples|sample|"
+                   r"samples|demo|fixtures?|mock|sandbox|middleware|infra|base|deps|template|templates|tpl)([-_.]|$)", re.I)
+DEPLOYISH = re.compile(r"^(deploy|deployment|deployments|docker|compose|docker-compose|install|release|prod|production)$", re.I)
+
+
+def compose_rank(p, src):
+    """越小越优先：路径里没有 dev / test / middleware 等字样 > 在 deploy、docker 这类目录里 > 标准文件名 > 浅目录"""
+    rel = p.relative_to(src)
+    name = p.name.lower()
+    noisy = 1 if any(NOISY.search(x) for x in rel.parts) else 0
+    deployish = 0 if (len(rel.parts) == 1 or any(DEPLOYISH.match(x) for x in rel.parts[:-1])) else 1
+    std = 0 if name in COMPOSE_NAMES else 1
+    return (noisy, deployish, std, len(rel.parts), str(rel))
+
+
+def is_compose_name(n):
+    n = n.lower()
+    return bool(re.search(r"(^|[-_.])compose([-_.].*)?\.ya?ml$", n)) and n not in OVERRIDE_NAMES and ".override." not in n
+
+
 def find_compose(src, given=None):
-    """返回 (选中的 compose 文件, 其他候选)"""
+    """返回 (选中的 compose 文件, 其他候选)。最多往下找 COMPOSE_MAX_DEPTH 层，跳过隐藏目录和依赖目录；
+    文件名可以是 docker-compose.yml，也可以是 docker-compose.pg.yml、docker-compose-milvus.yml 这类变体"""
     if given:
         p = Path(given) if Path(given).is_absolute() else src / given
         return (p if p.is_file() else None), []
-    cands = []
-    for d in [src] + [x for x in sorted(src.iterdir()) if x.is_dir() and not x.name.startswith(".")]:
-        for n in COMPOSE_NAMES:
-            if (d / n).is_file():
-                cands.append(d / n)
-    for d in sorted(src.glob("*/*")):
-        if d.is_dir() and d.name in ("docker", "deploy", "compose"):
-            for n in COMPOSE_NAMES:
-                if (d / n).is_file():
-                    cands.append(d / n)
+    cands, seen = [], 0
+    for root, dirs, fnames in os.walk(str(src)):  # os.walk 默认不跟随符号链接，不会绕圈
+        depth = len(Path(root).relative_to(src).parts)
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d.lower() not in SKIP_DIRS) \
+            if depth < COMPOSE_MAX_DEPTH else []
+        seen += 1
+        if seen > 20000:  # 超大仓库也只花几秒
+            break
+        cands += [Path(root) / f for f in fnames if is_compose_name(f)]
     if not cands:
         return None, []
-    pick = cands[0]
-    others = sorted({p for p in pick.parent.glob("*compose*.y*ml")
-                     if p != pick and p.name not in OVERRIDE_NAMES} | set(cands[1:]))
-    return pick, others
+    ordered = sorted(cands, key=lambda p: compose_rank(p, src))
+    return ordered[0], ordered[1:]
 
 
 def prepare_work(src, work, tag, log=None):
@@ -715,13 +736,17 @@ def cmd_plan(out, args):
 
     compose, others = find_compose(src, args.get("compose"))
     if not compose:
-        block("仓库里没有 docker-compose 文件，脚本不知道怎么启动这个项目（可按项目文档在容器里手动启动，或只做静态分析）", "project")
+        block("在仓库根目录、一级子目录和 docker / deploy 等部署目录里都没找到 compose 文件，脚本不知道怎么启动这个项目"
+              "（项目文档里有 compose 文件的话用 --compose <路径> 指定后重新检查；否则按文档在容器里手动启动，或只做静态分析）", "project")
         return finish_plan(out, plan, blockers, fixes, notes, changes, risks)
     try:
         rel = compose.resolve().relative_to(src)
     except ValueError:
         sys.exit(f"compose 文件 {compose} 不在代码目录 {src} 里")
     plan["compose"] = str(rel)
+    if not args.get("compose") and (compose.name.lower() not in COMPOSE_NAMES or len(rel.parts) > 1) and others:
+        notes.append(f"根目录没有标准的 docker-compose.yml，按目录和文件名从 {len(others) + 1} 个候选里选了 {rel}；"
+                     "项目文档推荐别的文件（例如按数据库区分的几份）时，用 --compose <路径> 指定后重新检查")
     if others:
         def show(o):
             try:

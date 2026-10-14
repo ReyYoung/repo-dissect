@@ -71,7 +71,7 @@ mkdir -p ~/.claude/skills/repo-dissect && cp -R SKILL.md VERSION references scri
 场景：私有化交付给客户，要求信创国产化、内网离线部署。需求清单见 ./需求清单.xlsx
 ```
 
-Claude Code 中用 `/repo-dissect`，也可以直接用自然语言描述任务。缺少的参数 Agent 会一次问完；无人值守时使用默认值，并写进 `index.md`。
+Claude Code 中用 `/repo-dissect`，也可以直接用自然语言描述任务。缺少的参数 Agent 会一次问完；无人值守时使用默认值，并写进 `index.md`。大仓库会先做全景（L0–L2），再把值得精读的机制列成候选表请你选，Agent 不会替你决定精读哪个模块，除非你明确说"你来挑"。
 
 ## 成果示例：RAGFlow 选型评估
 

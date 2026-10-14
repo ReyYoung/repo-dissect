@@ -52,6 +52,8 @@ SKILL.md 第 3 节的补充。脚本是 `scripts/run_project.py`，只用 Python
 | 跑不了，问题在本机（3，`recommend` 为 `recheck`：没装 Docker、磁盘或内存不够） | 我处理好了，重新检查 / 交给另一台电脑 / 只做静态分析 | 重新 `plan`，或 `handoff` |
 | 跑不了，问题在项目本身（3，`recommend` 为 `static`：没有 compose 文件、没有本机架构的镜像、compose 里只有基础设施） | 只做静态分析 | 需要时按项目文档在容器里手动启动，遵守同样的安全边界 |
 
+**选的 compose 文件不对**：`plan` 会在根目录和部署目录里找（最多 6 层，路径带 dev、test、template 的排后面），找到好几份时按目录和文件名选一份，并在卡片里列出其他候选。项目文档（README、部署文档）指定了别的文件，或按数据库、地区分了好几份时，读文档后用 `plan "$OUT" --compose <路径>` 重新检查。
+
 **只有基础设施的 compose**：很多项目的 `docker-compose.yml` 只启动数据库、缓存、消息队列、对象存储（postgres、redis、clickhouse、kafka / redpanda、minio、elasticsearch 等），应用本身要在本机装依赖（如 `bun install`、`pnpm install`，常常是 GB 级）后另行启动。这时卡片结论是"只有基础设施能启动，应用本身跑不起来，无法截图"（`plan.json` 里 `infra_only: true`），**不要对用户说"可以运行"**。仓库里另有包含应用服务的 compose 文件时，用 `--compose <路径>` 指定后重新 `plan`。
 
 检查本身出错时（例如 Agent 的文件沙箱拦截了某个操作），`plan` 也会写出一张卡片：结论"当前环境没能完成运行检查"、原因的白话说明、推荐交接，退出码 3。照常给用户选。

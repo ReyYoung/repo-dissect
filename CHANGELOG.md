@@ -2,6 +2,33 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.4.0] - 2026-10-14
+
+Based on two runs of 1.3.0 on FastGPT (Codex and WorkBuddy + DeepSeek), their evaluation reports, and a report from WorkBuddy on squeezed tables.
+
+### Changed
+
+- **Who picks the deep-dive modules.** SKILL.md §0 now lists the points where the user decides: the start-of-run question, the L0 gate, and, for large repositories whose goal includes L3/L4, a stop after L2 to choose 1–2 mechanisms from the candidate table. Other rules:
+  - The agent's recommendation, an answer to a different question, silence or elapsed time do not count as a choice.
+  - Only an explicit hand-over ("模块你来挑") lets the agent choose, and the user's words are recorded. "完整拆解", "直接跑完" and unattended mode alone do not count.
+  - Without a choice, the run delivers L0–L2 with the candidate table, marked "等待选题".
+  - Small repositories still self-select from the table and say so.
+  - For large repositories the L0 gate is reported together with the selection.
+- **Goal and use scenario are separate.** A scenario such as private delivery or SaaS only decides which licence and deployment checks to run inside existing layers. It no longer adds an R layer or changes the primary goal. Report sections follow the primary goal.
+- `index.md` records "选题依据": the user's words, the delegation, or "小仓库，按候选表自选". `checklinks.py` reports an error when 04- documents exist and `index.md` lacks this line or still says "等待选题".
+- `references/layers.md`:
+  - **New "常见误判清单":** eight kinds of conclusion that need more than the obvious evidence: required vs optional, community vs commercial, publishable vs published, costly vs impossible to extract, stable vs unverified, licence risk, painless upgrades, and enterprise features behind a flag.
+  - **L1:** maturity needs a source and is kept apart from whether this run verified it. Edition ownership is traced from UI through API to the local or commercial implementation.
+  - **L5:** reuse advice is written as "if the client needs X → Y", S/M/L estimates state their boundaries, and "hard to extract" is kept apart from "cannot be extracted".
+  - **R:** licence scans state their scope (ecosystems, lock file vs registry metadata, unknown and failed packages, what was not covered).
+  - **Community data:** figures state their basis, e.g. `open_issues_count` includes PRs.
+- Reports:
+  - **Tables:** tables with 3 or more columns get content-based column widths. Each column keeps a minimum width so Chinese text is no longer squeezed to one or two characters per line, and spare width goes to the columns with more content. Cells may break long paths, and printing uses proportional widths.
+  - **Wider text area:** the right-hand table of contents becomes the "目录" button below 1500 px.
+  - **Windows:** the page detects Windows and uses 15 px body text, darker text and slightly larger small text. Font stacks add Microsoft YaHei UI and Consolas or Cascadia Mono for code, which previously fell back to Courier New.
+  - **Sections:** `build_report.py` warns when `index.md` is listed as a report section.
+- `run_project.py plan` finds compose files with non-standard names (`docker-compose.pg.yml`, `docker-compose-milvus.yml`) up to six levels deep, skipping hidden and dependency folders. Paths containing dev, test, template, middleware and similar words are ranked last. When it picks a non-standard file, the card says so and lists the alternatives.
+
 ## [1.3.1] - 2026-10-14
 
 ### Added

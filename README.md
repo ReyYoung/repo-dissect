@@ -71,7 +71,7 @@ Use $repo-dissect to dissect https://github.com/infiniflow/ragflow for a selecti
 Scenario: on-premises delivery to a client, domestic-stack compliance, offline intranet deployment. Requirements: ./requirements.xlsx
 ```
 
-In Claude Code use `/repo-dissect`, or just describe the task. The agent asks for any missing parameters in one go; when unattended it uses defaults and records them in `index.md`.
+In Claude Code use `/repo-dissect`, or just describe the task. The agent asks for any missing parameters in one go; when unattended it uses defaults and records them in `index.md`. For a large repository it first maps the whole project (L0–L2), then lists candidate mechanisms and asks you which to dig into; it does not pick for you unless you explicitly tell it to.
 
 ## Example: RAGFlow selection assessment
 
