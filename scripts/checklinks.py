@@ -23,7 +23,8 @@
      这类文件开头内容——它们只能说明"文件在这"，证明不了结论；请改指到真正证明结论的行
   7. 核心模块精读（04- 开头的文档）缺少规定的六块内容 → 报错（见 references/layers.md L4）
   8. 有 04- 文档时，同目录的 index.md 要写"选题依据"（用户选择的原话、明确委托的原话，或"小仓库，按候选表自选"）→ 没写报错；
-     index.md 还没写时只提示（见 SKILL.md 第 0 节"两个决策点"）
+     index.md 还没写时只提示（见 SKILL.md 第 0 节"需要用户拿主意的地方"）
+  9. 同目录有 index.md 但没有「关键结论核对表」时提示（不影响退出码）
   提示（不影响退出码）:
   - 标了 ✅ 的行里没有行号级代码引用（标题行、表头、同一行写了检索或 git 命令作证据的除外）
   - 绝对化用语（必然、绝对、确保、100% 等），提醒复核证据是否撑得起这么强的说法
@@ -317,6 +318,13 @@ for f in files:
         print(f"    提示：{len(strong)} 处绝对化用语，请确认证据撑得起这么强的说法，撑不起就改弱，例如：")
         for ln in strong[:3]:
             print("      ·", ln[:100])
+# 关键结论核对表：首屏结论要从这张表里来（只提示，不影响退出码）
+for d in sorted({os.path.dirname(os.path.abspath(f)) for f in files
+                 if re.match(r"\d", os.path.basename(f)) and os.path.isfile(f)}):
+    idx = os.path.join(d, "index.md")
+    if os.path.isfile(idx) and "关键结论核对表" not in open(idx, encoding="utf-8").read():
+        print(f"提示：{idx} 还没有「关键结论核对表」：首屏结论和否定、全称、数量等关键判断，"
+              "逐条写范围、证据和查过的反例（见 SKILL.md 第 5 节第 8 条）")
 # 精读了核心模块，就要说明是谁选的、依据是什么
 for d in sorted({os.path.dirname(os.path.abspath(f)) for f in files
                  if os.path.basename(f).startswith("04-") and os.path.isfile(f)}):

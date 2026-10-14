@@ -26,6 +26,13 @@ if len(_args) != 1 or MODE not in ("auto", "static", "inline"):
 OUT = Path(_args[0]).resolve()
 MERMAID_JS = Path(__file__).resolve().parent.parent / "assets" / "vendor" / "mermaid.min.js"
 MERMAIDS = []  # 全报告的 Mermaid 源码，按出现顺序编号
+MERMAID_AT = []  # 每张图所在的章节和小节，用于提示
+HINTS = []  # 生成完统一打印的提示（规模超限、首屏写法等）
+SKILL_VERSION = ""
+try:
+    SKILL_VERSION = (Path(__file__).resolve().parent.parent / "VERSION").read_text(encoding="utf-8").strip()
+except OSError:
+    pass
 if not (OUT / "report.json").is_file():
     sys.exit(f"找不到 {OUT / 'report.json'}；格式参考本 skill 的 assets/examples/report.example.json")
 CFG = json.loads((OUT / "report.json").read_text(encoding="utf-8"))
@@ -286,6 +293,7 @@ def convert(md_text, sec_id, label):
         heads = re.findall(r"^#+\s*(.+)$", before, flags=re.M)
         name = re.sub(r"[`*\\/:]", "", heads[-1]).strip() if heads else "diagram"
         MERMAIDS.append(m.group(1))
+        MERMAID_AT.append(f"{label}「{name}」")
         return keep(f'<figure class="diagram" data-name="{E(name)}">\x00MERMAID{len(MERMAIDS) - 1}\x00</figure>')
 
     def svgfig(m):
@@ -328,6 +336,84 @@ def convert(md_text, sec_id, label):
     return body
 
 
+# ---- Mermaid 图规模：和 charts-and-report.md 第 2 节的上限一致
+_ARROW = re.compile(r"\s*(?:<?[-=.]{2,}[->xo]?>?|<?-\.+->?|&)\s*")
+_ID = r"[A-Za-z_一-鿿0-9][\w一-鿿-]*"
+
+
+def _flow_nodes(body):
+    nodes = set()
+    stmts = [x.strip() for ln in body for x in re.sub(r'"[^"]*"', '""', ln).split(";") if x.strip()]
+    for ln in stmts:
+        if re.match(r"(subgraph|end\b|classDef|class\s|style\s|linkStyle|click\s|direction)", ln):
+            continue
+        t = ln
+        t = re.sub(r"\|[^|]*\|", " ", t)                       # -->|标签|
+        t = re.sub(r"@\{[^{}]*\}", "", t)                       # A@{ shape: ... }
+        t = re.sub(r"\b\w+@(?=[-=.<])", "", t)                  # 边的 id：e1@-->
+        for _ in range(3):                                      # 各种形状里的文字
+            t = re.sub(r"\[[^\[\]]*\]|\([^()]*\)|\{[^{}]*\}|(?<=[\w一-鿿])>[^\]]*\]", "", t)
+        t = re.sub(r"(?:--|==|-\.)(?![->.=])\s*[^-=.>]+?\s*(?=-->|---|==>|===|\.->|\.-)", "", t)  # A -- 文字 --> B
+        t = re.sub(r":::[\w-]+", "", t)
+        for tok in _ARROW.split(t):
+            tok = tok.strip(" ;")
+            if re.fullmatch(_ID, tok):
+                nodes.add(tok)
+    return nodes
+
+
+def _states(body):
+    st = set()
+    for ln in body:
+        if re.match(r"(classDef|class\s|style\s|note\b|end note|direction\b|--$|\}|\[\*\]\s*$)", ln):
+            continue
+        m = re.match(r'state\s+(?:"[^"]*"\s+as\s+)?([\w一-鿿]+)', ln)
+        if m:
+            st.add(m.group(1))
+            continue
+        ln = re.split(r"\s*:\s*", ln, maxsplit=1)[0]                     # 去掉转移上的说明
+        for tok in re.split(r"\s*-->\s*", ln):
+            tok = tok.strip()
+            if re.fullmatch(r"[\w一-鿿]+", tok):
+                st.add(tok)
+    return st
+
+
+def mermaid_size(src):
+    """返回 (图型, {指标: (数量, 上限)})；认不出的图返回 (None, {})。只用于提示，数得不准也不影响生成"""
+    lines = [ln.strip() for ln in src.splitlines() if ln.strip() and not ln.strip().startswith("%%")]
+    if not lines:
+        return None, {}
+    head = lines[0].split()[0]
+    body = lines[1:]
+    if head == "sequenceDiagram":
+        parts, msgs = set(), 0
+        for ln in body:
+            m = re.match(r"(?:create\s+)?(?:participant|actor)\s+([^\s@]+)", ln)
+            if m:
+                parts.add(m.group(1))
+                continue
+            m = re.match(r"([^\s:+-][^:]*?)\s*(?:<<-{1,2}>>|-{1,2}>>|-{1,2}>|-{1,2}x|-{1,2}\))\s*[+-]?\s*([^:]+?)\s*:", ln)
+            if m:
+                msgs += 1
+                parts.update([m.group(1).strip(), m.group(2).strip()])
+        return "时序图", {"参与者": (len(parts), 6), "消息": (msgs, 12)}
+    if head in ("flowchart", "graph"):
+        kind, lim = ("流程图", 12) if head == "flowchart" else ("依赖图", 15)
+        return kind, {"节点": (len(_flow_nodes(body)), lim)}
+    if head.startswith("stateDiagram"):
+        return "状态图", {"状态": (len(_states(body)), 8)}
+    if head == "erDiagram":
+        ents = set()
+        for ln in body:
+            m = (re.match(r'("[^"]+"|[\w-]+)\s+[|}o][|o]?(?:--|\.\.)[|o{]{1,2}\s+("[^"]+"|[\w-]+)', ln)
+                 or re.match(r'("[^"]+"|[\w-]+)(?:\[[^\]]*\])?\s*\{', ln))
+            if m:
+                ents.update(g for g in m.groups() if g)
+        return "ER 图", {"实体": (len(ents), 12)}
+    return None, {}
+
+
 secs, nav = [], []
 for i, s in enumerate(CFG["sections"]):
     fname, label = s[0], s[1]
@@ -349,6 +435,13 @@ for i, s in enumerate(CFG["sections"]):
         secs.append(f'<section class="sec" id="{sid}" data-label="{E(label)}">{body}</section>')
     nav.append(f'<a href="#{sid}" data-sec="{sid}"><span class="ico"></span>{E(label)}</a>')
 
+if SKILL_VERSION and CFG.get("about") is not None:
+    _ab = []
+    for x in CFG["about"]:
+        if isinstance(x, (list, tuple)) and x and str(x[0]) == "技能版本":
+            continue  # 旧的版本行去掉，统一在最后写当前版本
+        _ab.append(x)
+    CFG["about"] = _ab + [["技能版本", f"repo-dissect v{SKILL_VERSION}"]]
 # 文末固定两块：待确认清单（pending）、报告说明（about：制作统计、方法、证据边界）
 END = (("pending", "待确认清单", "还没能用代码或运行坐实、需要人工确认的事项"),
        ("about", "报告说明", "这份报告是怎么做出来的：范围、方法、制作统计和证据边界"))
@@ -368,6 +461,41 @@ for key, label, hint in END:
     secs.append(f'<section class="sec endcard" id="{sid}" data-label="{E(label)}"><h2><span class="secno">{n:02d}</span>{E(label)}</h2>'
                 f'<p class="aux">{E(hint)}</p>{_retag("<ul>" + "".join(lis) + "</ul>")}</section>')
     nav.append(f'<a href="#{sid}" data-sec="{sid}"><span class="ico"></span>{E(label)}</a>')
+
+# 首屏写法检查：关键数字别放制作指标；结论里的全称词要有范围
+_PROD = re.compile(r"代码引用|引用数|核验|份(分层)?文档|文档数|分析.{0,4}文件|精读|完成.{0,3}层|子代理|L[0-5]\b")
+for item in CFG.get("stats", []):
+    m = _PROD.search(str(item[1]))  # 只看标签：补充说明里提到"引用"不算
+    if m:
+        HINTS.append(f"首屏关键数字「{item[1]}」像是报告的制作指标（{m.group(0)}），"
+                     "应放进 about（报告说明）；首屏只放项目本身的事实")
+_ALL = re.compile(r"全部|所有|唯一|没有|只能|不会|一律|完全|从不|永远|必然|绝对|保证|确保")
+_SCOPE = re.compile(r"在.{0,20}(范围|中|里|内)|范围|检索|扫描|未找到|没找到|本 ?commit|默认|根目录|开源版|社区版|按")
+try:
+    _INDEX = (OUT / "index.md").read_text(encoding="utf-8")
+except OSError:
+    _INDEX = ""
+for t in [CFG["verdict"].get("summary", "")] + list(CFG["verdict"].get("points", [])):
+    t = str(t)
+    m = _ALL.search(t)
+    if not m or _SCOPE.search(t):
+        continue
+    key = re.sub(r"\s", "", t)[:10]
+    if key and key in re.sub(r"\s", "", _INDEX):
+        continue  # 核对表里已有这条
+    short = t if len(t) <= 40 else t[:40] + "…"
+    HINTS.append(f"首屏结论里有「{m.group(0)}」又没写范围：「{short}」——写清在什么范围、用什么方法得出，"
+                 "并在 index.md 的关键结论核对表里加一行；撑不起就改弱")
+# 技能版本写进页脚和报告说明，方便事后追溯
+if SKILL_VERSION:
+    stamp = f"repo-dissect v{SKILL_VERSION}"
+    ft = str(CFG.get("footer", ""))
+    if re.search(r"repo-dissect v[\d.]+", ft):
+        CFG["footer"] = re.sub(r"repo-dissect v[\d.]+", stamp, ft)  # 增量更新时换成当前版本
+    elif "由 repo-dissect 生成" in ft:
+        CFG["footer"] = ft.replace("由 repo-dissect 生成", f"由 {stamp} 生成")
+    else:
+        CFG["footer"] = ((ft.rstrip() + " · ") if ft else "") + f"由 {stamp} 生成"
 
 v = CFG["verdict"]
 vt = VERDICT_TONE.get(v["level"], "default")
@@ -697,5 +825,16 @@ if MERMAIDS:
     print(f"Mermaid 图 {len(MERMAIDS)} 张，方式 {mode_used}" + (f"，其中 {bad} 张语法错误" if bad else ""))
 page = page.replace("MERMAID_CFG", MERMAID_CFG).replace("<script type=\"module\">", lib + "<script type=\"module\">", 1)
 
+for i, src in enumerate(MERMAIDS):
+    kind, sizes = mermaid_size(src)
+    over = [f"{k} {n} 个（上限 {lim}）" for k, (n, lim) in sizes.items() if n > lim]
+    if over:
+        how = "按阶段拆成几张，只负责转交的中间层写进图注" if kind == "时序图" else "拆图或先把同类步骤聚合"
+        HINTS.append(f"第 {i + 1} 张 Mermaid 图（{MERMAID_AT[i]}，{kind}）超过规模上限：{'、'.join(over)}；{how}")
+
 (OUT / "report.html").write_text(page, encoding="utf-8")
 print("report.html", len(page))
+if HINTS:
+    print(f"\n交付前请处理以下 {len(HINTS)} 条提示（不影响生成，规则见 references/charts-and-report.md）：")
+    for h in HINTS:
+        print("  -", h)

@@ -2,6 +2,45 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.5.0] - 2026-10-14
+
+Based on three 1.4.x runs on the same project (WorkBuddy on Mac and Windows, Codex) and Codex's review of them. Every code link in all three reports resolved, yet several conclusions were stronger than the evidence, and summaries contradicted the body. This release adds light rules and script hints, not new ledgers.
+
+### Added
+
+- **Key-claims table.** `index.md` gains a 「关键结论核对表」 (claim | scope | evidence | counter-examples checked) covering the front-page conclusions and key negative, universal, numeric, licence, data-flow and lifecycle claims. It is filled after the body and the open questions, and the front page is taken from it. `checklinks.py` gives a hint when it is missing.
+- **Verification levels V0–V4** (static reading, pure-logic tests, mocked dependencies, real dependencies, target platform). "Read a test assertion" is V0, not "tests pass". `index.md` also records report QA results as passed / failed / not done.
+- **Script hints in `build_report.py`:**
+  - Mermaid size: sequence participants and messages, flowchart and graph nodes, states, ER entities, against the documented limits;
+  - front-page stats that look like production metrics;
+  - front-page conclusions that use universal words without a scope.
+- **Version stamp.** The skill version is written into the report footer and the "报告说明" section.
+- **Domestic-stack check (L5 item 7).** When the scenario has a 信创 / domestic-stack constraint, each database, middleware and model-API component is assessed for whether it can be replaced by a domestic Chinese product, and at what cost:
+  - the access path is checked first (ORM or dialect layer vs direct calls, dialect-specific SQL, whether the model API takes a configurable `base_url`);
+  - cost is given as S/M/L with stated boundaries, and data migration gets its own row;
+  - a vendor's "compatible with X" claim is checked feature by feature against what the project actually uses, and anything not run is marked "not verified".
+
+  When only the selection assessment runs (no L5), the table goes into `06-选型评估.md`.
+
+### Changed
+
+- **Numbers** must state what was counted, the scope and dedup rule. Counts from different bases are not merged. Estimates stay off the front-page stats and are labelled "粗估" in conclusions.
+- **Negative and universal claims** are written as "within X, using Y, Z was not found". `references/layers.md` adds checks for six common ones: no config file, everything under one mechanism, only freed by restart, no queue, a value never used in production code, and a generated file not checked by CI.
+- **Licences:** top-level and component licences are recorded separately. MPL, EPL and LGPL are weak copyleft and CC-BY requires attribution, so none of them is "permissive"; unknown means unknown.
+- **L2** lists four boundaries separately: configuration sources, resource ownership (owned process, attached session, external service), queues (separate broker vs in-process) and how resources are released.
+- **L3** sequence diagrams cover one stage each. "Create an object" is kept apart from "start a process", and L3 is updated when L4 corrects it.
+- **L4:**
+  - "A is derived from B" claims are checked against actual inputs and outputs;
+  - weaker alternatives must be labelled as a different design;
+  - goals 架构学习 and 写教程 add a short reading route with an example and a counter-example.
+- **Subagents** receive environment facts (user platform, host, target platform, verification done) from the main agent instead of guessing. After merging, the main agent reconciles front page, body and open questions, keeps L3 and L4 consistent, and recounts the statistics. Spot checks cover a positive fact, a negative claim and a cross-module edge.
+- **Example:** the ER diagram is trimmed to 12 entities, the 7-participant sequence diagram is split into ingest and query, a 13-node flowchart is merged to 12, and `index.md` gains the new sections.
+
+### Fixed
+
+- Leftover references to "两个决策点" (renamed in 1.4.0) now point to "需要用户拿主意的地方".
+- The change summary shown with an update prompt no longer shows a bare two-word title; it adds the first clause after it.
+
 ## [1.4.1] - 2026-10-14
 
 ### Changed

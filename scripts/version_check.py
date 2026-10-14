@@ -100,9 +100,13 @@ def parse_changes(text, local, limit=6):
     items, keep = [], False
 
     def short(t):
-        b = re.match(r"\*\*(.+?)\*\*", t)
-        t = b.group(1) if b else re.split(r"[。；:：]", re.sub(r"[`*]", "", t))[0]
-        return t.strip().rstrip("。.：:")
+        b = re.match(r"\*\*(.+?)\*\*\s*(.*)", t)
+        if b:
+            head = re.sub(r"`", "", b.group(1)).strip().rstrip("。.：:")
+            if len(head) <= 4 and b.group(2):  # 标题太短（如"数字"），补上后面半句
+                head += "：" + re.split(r"[。；，,]", re.sub(r"[`*]", "", b.group(2)))[0].strip()
+            return head
+        return re.split(r"[。；:：]", re.sub(r"[`*]", "", t))[0].strip().rstrip("。.：:")
 
     for ln in text.splitlines():
         m = re.match(r"## \[(\d+\.\d+\.\d+)\]", ln)

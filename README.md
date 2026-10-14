@@ -9,7 +9,7 @@ An agent skill for dissecting open-source projects. Give it a GitHub link or a l
 ## What it does
 
 - **Business view**: target users, usage scenarios, business panorama, feature architecture, and a feature inventory (community vs. enterprise; stable / experimental / deprecated).
-- **Technical view**: modules and layers, core abstractions, main-flow call chain, core-module deep dives (picked from a ranked table of candidate mechanisms; each covers inputs and outputs, the core mechanism, failure boundaries, trade-offs, where it applies, and technical debt), reuse assessment.
+- **Technical view**: modules and layers, core abstractions, main-flow call chain, core-module deep dives (picked from a ranked table of candidate mechanisms; each covers inputs and outputs, the core mechanism, failure boundaries, trade-offs, where it applies, and technical debt), reuse assessment (with a component-by-component check of whether the database, middleware and model APIs can be swapped for domestic Chinese products, and at what cost, when the scenario requires it).
 - **Selection assessment**: feature fit, license deep-dive, project health, security, deployment and localization / offline constraints, alternatives, with a recommend / conditional / not-recommended verdict.
 - **Requirement-fit matrix**: given a requirement list or tender document, rates each item as met / partially met / needs custom development / enterprise only / not met.
 - **Traceable**: every claim links to code lines at a pinned commit and is marked ✅ fact / 🔍 inference / ❓ unconfirmed; links are verified automatically before delivery. Key conclusions are checked against "can the code prove it, is there a counter-example", and anything not confirmed goes into an open-questions list.
@@ -100,7 +100,7 @@ Verdict: **conditionally recommended**. Of 28 sample requirements: 10 met, 12 pa
 | File | Contents |
 | --- | --- |
 | `report.html` | Summary report in a single file, works offline; diagrams downloadable as SVG / PNG; printable to PDF |
-| `index.md` | Analyzed version, method, defaults used, link-check result |
+| `index.md` | Analyzed version, skill version, method, defaults used, who chose the deep-dive modules, verification level, link-check result, key-claims table, open questions |
 | `00-画像.md` … `07-需求响应矩阵.md` | Per-layer analysis documents |
 | `img/` | Diagram SVGs and their data files |
 
