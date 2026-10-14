@@ -14,6 +14,7 @@ description: 系统拆解 GitHub 开源项目或本地代码库（支持多项�
 | `references/layers.md` | 每做一层之前，读该层小节（L0–L5、R、Q、对比、可借鉴设计） |
 | `references/charts-and-report.md` | 画图前、生成 `report.html` 前 |
 | `scripts/check_env.py` | 开工前自检环境（含 GitHub 连接速度、证书、代理），决定哪些步骤要降级 |
+| `scripts/version_check.py`、`VERSION` | 检查本技能有没有新版本（`check_env.py` 自动调用），只提醒不自动更新 |
 | `scripts/fetch_repo.py` | `git clone` 不可用或很慢时取代码：整包下载或逐文件下载，按固定 commit 校验 |
 | `scripts/diagrams.py` | 业务全景图、功能架构图（JSON → SVG，出图前后自动检查规模和文字溢出） |
 | `scripts/run_project.py` | 第 3 节：运行决策卡片、一键运行截图、清理、交给用户电脑上的 Agent |
@@ -69,7 +70,8 @@ description: 系统拆解 GitHub 开源项目或本地代码库（支持多项�
    都找不到时，在用户的项目目录下找 `.agents/skills/`、`.claude/skills/`、`.deepcode/skills/`、`.dsh/skills/` 里的 `repo-dissect`。
    **只装了 SKILL.md、没有 `scripts/` 时**（例如只同步了这一个文件），从发布仓库取完整文件，用它作 `SKILL_DIR`：
    `git clone --depth 1 https://github.com/ReyYoung/repo-dissect.git ~/.cache/repo-dissect-skill`（已存在就 `git -C ~/.cache/repo-dissect-skill pull`）。
-2. **环境自检**：`python3 <SKILL_DIR>/scripts/check_env.py`，按它列出的"降级做法"调整后续步骤。最后两行是结论："运行项目"决定第 3 节在本机运行还是交给用户电脑上的 Agent；"取代码"决定第 3 步用 `git clone` 还是 `fetch_repo.py`。
+2. **环境自检**：`python3 <SKILL_DIR>/scripts/check_env.py`，按它列出的"降级做法"调整后续步骤。最后几行是结论："运行项目"决定第 3 节在本机运行还是交给用户电脑上的 Agent；"取代码"决定第 3 步用 `git clone` 还是 `fetch_repo.py`；出现"技能版本"一行时，说明本技能有新版本，在报计划时用一句话告诉用户怎么更新（照抄输出里的方法），**不要自己去更新技能**，本次继续用当前版本。
+   **不要修改本技能自己的文件**（SKILL.md、`scripts/`、`references/`、`assets/`）：发现脚本问题时，在输出目录里绕开（例如手工补一步），并在 `index.md` 记下问题和复现方式，交给用户反馈给作者。
 3. **拉代码并固定版本**（"取代码"为 git clone 直接可用时）：
    ```bash
    OUT=<输出目录的绝对路径>/<repo-name>

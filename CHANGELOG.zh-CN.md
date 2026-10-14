@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · 简体中文
 
+## [1.3.1] - 2026-10-14
+
+### 新增
+
+- 版本更新检查。新增 `VERSION` 文件记录安装的版本。`scripts/version_check.py` 把它和 GitHub 上最新的正式版 tag 对比，API 不通时改用 `git ls-remote`；`check_env.py` 开头会先运行它。
+  - 有新版本时给出更新方法：git 克隆安装的用 `git pull --ff-only`，其他安装方式给一句发给 Agent 的更新指令。技能目录里有本地改动时，先提醒备份。
+  - 不会下载或替换任何文件。SKILL.md 要求 Agent 在报计划时提一句可以更新，本次继续用当前版本。
+  - 没网时安静跳过；设置 `RD_NO_UPDATE_CHECK=1` 可关闭。
+- SKILL.md：拆解过程中 Agent 不得修改技能自身的文件。遇到问题在输出目录里绕开，并记进 `index.md`。
+- README：新增「更新」一节；手动安装命令也会复制 `VERSION`。
+
 ## [1.3.0] - 2026-10-13
 
 依据两次实际使用的反馈（Windows 上的 Codex、WorkBuddy + DeepSeek，拆解的都是 Databuddy），以及对这两份报告的评估。

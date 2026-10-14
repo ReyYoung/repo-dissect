@@ -198,6 +198,15 @@ def probe_files():
 
 
 fp = probe_files()
+
+# ---- 技能自身的版本：只检查和提醒，不自动更新
+try:
+    import version_check as vc
+    ver = vc.check()
+    rows.insert(0, ("repo-dissect 版本", "✗" if ver["newer"] else ("✓" if ver["latest"] else "·"), vc.summary(ver)))
+    tips[:0] = ver["advice"]
+except Exception:
+    ver = None
 add("文件沙箱", not (fp["mkdir"] or fp["env"]),
     "无限制" if not (fp["mkdir"] or fp["env"]) else "；".join(x for x in (
         "对已存在目录 mkdir 会报错（脚本已兼容）" if fp["mkdir"] else "",
@@ -226,6 +235,9 @@ else:
 if fp["env"] and docker in ("up", "startable") and hub:
     verdict += "；注意本环境拦截 .env 类文件，运行前先在前台执行 run_project.py prepare"
 print("运行项目: " + verdict)
+if ver and ver["newer"]:
+    print(f"技能版本: 当前 {ver['local'] or '1.3.0 或更早'}，最新 {ver['latest']}。请在报计划时用一句话告诉用户可以更新（方法见上），"
+          "不要自动更新，本次继续用当前版本")
 if local_px:
     print(f"取代码: 直连{'慢' if gh_state == 'slow' else '不通'}，经本机代理 {local_px} 可用；用 fetch_repo.py 取码（会自动只对本次命令使用该代理）")
 elif dead_cfg and gh_state in ("ok", "slow"):

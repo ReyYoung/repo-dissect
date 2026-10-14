@@ -46,13 +46,23 @@ Install the skill repo-dissect from https://github.com/ReyYoung/repo-dissect, th
 git clone https://github.com/ReyYoung/repo-dissect.git && cd repo-dissect
 
 # Codex / Deep Code / DeepSeek Harness
-mkdir -p ~/.agents/skills/repo-dissect && cp -R SKILL.md agents references scripts assets ~/.agents/skills/repo-dissect/
+mkdir -p ~/.agents/skills/repo-dissect && cp -R SKILL.md VERSION agents references scripts assets ~/.agents/skills/repo-dissect/
 
 # Claude Code
-mkdir -p ~/.claude/skills/repo-dissect && cp -R SKILL.md references scripts assets ~/.claude/skills/repo-dissect/
+mkdir -p ~/.claude/skills/repo-dissect && cp -R SKILL.md VERSION references scripts assets ~/.claude/skills/repo-dissect/
 ```
 
 Restart the agent if it does not pick up the skill right away.
+
+### Updating
+
+The skill does not update itself. At the start of each run, the environment check compares your version with the latest one on GitHub and tells you if a newer one exists; it never downloads anything on its own. To update, send this to your agent:
+
+```text
+Update the repo-dissect skill from https://github.com/ReyYoung/repo-dissect to the latest version, overwriting the existing install, then run scripts/check_env.py and tell me the version.
+```
+
+Set `RD_NO_UPDATE_CHECK=1` to turn the check off.
 
 ## Usage
 

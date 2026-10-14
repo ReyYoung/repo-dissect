@@ -2,6 +2,17 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.3.1] - 2026-10-14
+
+### Added
+
+- Update check. A `VERSION` file records the installed version. `scripts/version_check.py` compares it with the latest release tag on GitHub, falling back to `git ls-remote` when the API is unreachable, and `check_env.py` runs it first.
+  - When a newer version exists, the check shows how to update: `git pull --ff-only` for a git install, or a one-line prompt for the agent otherwise. It warns first if files in the skill folder were modified locally.
+  - It never downloads or replaces anything. SKILL.md tells the agent to mention the update once when presenting the plan and to keep using the current version.
+  - It is skipped silently when offline. Set `RD_NO_UPDATE_CHECK=1` to turn it off.
+- SKILL.md: the agent must not modify the skill's own files during a run. Problems are worked around in the output folder and noted in `index.md`.
+- README: an "Updating" section. The manual install commands now copy `VERSION` too.
+
 ## [1.3.0] - 2026-10-13
 
 Based on feedback from two real runs (Codex on Windows and WorkBuddy + DeepSeek, both on Databuddy) and a review of their reports.

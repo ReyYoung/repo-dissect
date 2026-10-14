@@ -46,13 +46,23 @@
 git clone https://github.com/ReyYoung/repo-dissect.git && cd repo-dissect
 
 # Codex / Deep Code / DeepSeek Harness
-mkdir -p ~/.agents/skills/repo-dissect && cp -R SKILL.md agents references scripts assets ~/.agents/skills/repo-dissect/
+mkdir -p ~/.agents/skills/repo-dissect && cp -R SKILL.md VERSION agents references scripts assets ~/.agents/skills/repo-dissect/
 
 # Claude Code
-mkdir -p ~/.claude/skills/repo-dissect && cp -R SKILL.md references scripts assets ~/.claude/skills/repo-dissect/
+mkdir -p ~/.claude/skills/repo-dissect && cp -R SKILL.md VERSION references scripts assets ~/.claude/skills/repo-dissect/
 ```
 
 如果 Agent 没有立即识别，重启一次即可。
+
+### 更新
+
+技能不会自动更新。每次拆解开始时，环境自检会对比 GitHub 上的最新版本，有新版本就提醒你（只提醒，不会自动下载）。更新时在 Agent 对话框里发送：
+
+```text
+从 https://github.com/ReyYoung/repo-dissect 更新 repo-dissect 技能到最新版，覆盖原来的安装目录，然后运行 scripts/check_env.py 校验，并告诉我版本号。
+```
+
+不想检查更新时，设置环境变量 `RD_NO_UPDATE_CHECK=1`。
 
 ## 使用方法
 
