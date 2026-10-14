@@ -2,6 +2,19 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.4.1] - 2026-10-14
+
+### Changed
+
+- Updating with consent. When the environment check finds a newer version, the agent now asks in its first question whether to update before starting, listing the main changes read from the new version's changelog.
+  - If the user agrees, it runs `version_check.py --update`, re-reads SKILL.md, re-runs the check and starts with the new rules.
+  - If the user declines, does not answer, or the run is unattended, it continues with the current version.
+- `scripts/version_check.py --update`:
+  - **git install:** runs `git pull --ff-only`. It refuses and lists the files when the skill folder has local changes.
+  - **Other installs:** fetches the release tag (git clone, falling back to the GitHub archive) and checks its `VERSION`. It backs up the old files to `~/.cache/repo-dissect-backup/`, then replaces only the skill files: `SKILL.md`, `VERSION`, `agents/`, `references/`, `scripts/` and `assets/`.
+- `index.md` records the skill version used, the latest version on GitHub, and whether the skill was updated at the start.
+- README: the "Updating" section describes the new flow and the manual command.
+
 ## [1.4.0] - 2026-10-14
 
 Based on two runs of 1.3.0 on FastGPT (Codex and WorkBuddy + DeepSeek), their evaluation reports, and a report from WorkBuddy on squeezed tables.

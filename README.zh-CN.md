@@ -56,11 +56,15 @@ mkdir -p ~/.claude/skills/repo-dissect && cp -R SKILL.md VERSION references scri
 
 ### 更新
 
-技能不会自动更新。每次拆解开始时，环境自检会对比 GitHub 上的最新版本，有新版本就提醒你（只提醒，不会自动下载）。更新时在 Agent 对话框里发送：
+每次拆解开始时，环境自检会对比 GitHub 上的最新版本。有新版本时，Agent 会在开工的那次提问里列出主要改动，问你要不要先更新；你同意后它执行更新、重新读取技能说明，再按新版本开工。不同意或无人值守时，照常用当前版本。技能不会在你不知情时自动更新。
 
-```text
-从 https://github.com/ReyYoung/repo-dissect 更新 repo-dissect 技能到最新版，覆盖原来的安装目录，然后运行 scripts/check_env.py 校验，并告诉我版本号。
+也可以自己更新（git 克隆安装的用 `git pull`，其他安装方式下载新版本覆盖，旧版本备份在 `~/.cache/repo-dissect-backup/`；技能目录里有本地改动时不会覆盖）：
+
+```bash
+python3 <技能目录>/scripts/version_check.py --update
 ```
+
+1.3.0 及更早版本没有这个功能，需要先按上面的"手动安装"重装一次。
 
 不想检查更新时，设置环境变量 `RD_NO_UPDATE_CHECK=1`。
 

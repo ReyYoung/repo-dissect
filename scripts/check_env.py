@@ -236,8 +236,9 @@ if fp["env"] and docker in ("up", "startable") and hub:
     verdict += "；注意本环境拦截 .env 类文件，运行前先在前台执行 run_project.py prepare"
 print("运行项目: " + verdict)
 if ver and ver["newer"]:
-    print(f"技能版本: 当前 {ver['local'] or '1.3.0 或更早'}，最新 {ver['latest']}。请在报计划时用一句话告诉用户可以更新（方法见上），"
-          "不要自动更新，本次继续用当前版本")
+    print(f"技能版本: 当前 {ver['local'] or '1.3.0 或更早'}，GitHub 上已有 {ver['latest']}。在开工那次提问里问用户要不要先更新"
+          f"（附上主要改动）；用户同意就执行 {vc.update_cmd()}，成功后重新读取 SKILL.md、重跑本脚本再开工；"
+          "用户不同意、没回复或无人值守时，继续用当前版本。无论哪种，都在 index.md 记下版本和是否更新过")
 if local_px:
     print(f"取代码: 直连{'慢' if gh_state == 'slow' else '不通'}，经本机代理 {local_px} 可用；用 fetch_repo.py 取码（会自动只对本次命令使用该代理）")
 elif dead_cfg and gh_state in ("ok", "slow"):

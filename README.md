@@ -56,11 +56,15 @@ Restart the agent if it does not pick up the skill right away.
 
 ### Updating
 
-The skill does not update itself. At the start of each run, the environment check compares your version with the latest one on GitHub and tells you if a newer one exists; it never downloads anything on its own. To update, send this to your agent:
+At the start of each run, the environment check compares your version with the latest one on GitHub. If a newer version exists, the agent lists the main changes in its first question and asks whether to update first. If you agree, it updates, re-reads the skill instructions and starts with the new version; if you decline or the run is unattended, it carries on with the current one. The skill never updates without your consent.
 
-```text
-Update the repo-dissect skill from https://github.com/ReyYoung/repo-dissect to the latest version, overwriting the existing install, then run scripts/check_env.py and tell me the version.
+You can also update it yourself. A git install is updated with `git pull`; other installs download the new release and keep a backup of the old one in `~/.cache/repo-dissect-backup/`. Local changes in the skill folder are never overwritten.
+
+```bash
+python3 <skill folder>/scripts/version_check.py --update
 ```
+
+Version 1.3.0 and earlier lack this; reinstall once using "Manual install" above.
 
 Set `RD_NO_UPDATE_CHECK=1` to turn the check off.
 

@@ -2,6 +2,19 @@
 
 [English](CHANGELOG.md) · 简体中文
 
+## [1.4.1] - 2026-10-14
+
+### 变更
+
+- 经用户同意后更新。环境自检发现新版本时，Agent 在开工那次提问里问要不要先更新，并列出从新版本更新记录里读到的主要改动。
+  - 用户同意：执行 `version_check.py --update`，重新读取 SKILL.md、重跑自检，再按新规则开工。
+  - 用户不同意、没回复或无人值守：继续用当前版本。
+- `scripts/version_check.py --update`：
+  - **git 克隆安装的**：执行 `git pull --ff-only`；技能目录有本地改动时不更新，并列出改了哪些文件。
+  - **其他安装方式**：下载对应 tag（先 git clone，不行再下载 GitHub 整包），核对其中的 `VERSION`，旧版本备份到 `~/.cache/repo-dissect-backup/` 后，只替换技能本身的文件：`SKILL.md`、`VERSION`、`agents/`、`references/`、`scripts/`、`assets/`。
+- `index.md` 记录这次用的技能版本、GitHub 上的最新版本，以及开工时是否更新过。
+- README：「更新」一节改为说明新流程和手动更新命令。
+
 ## [1.4.0] - 2026-10-14
 
 依据 1.3.0 在 FastGPT 上的两次运行（Codex、WorkBuddy + DeepSeek）、对这两份报告的评估，以及 WorkBuddy 关于表格挤压的分析。
