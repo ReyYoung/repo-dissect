@@ -200,13 +200,34 @@ def probe_files():
 fp = probe_files()
 
 # ---- 技能自身的版本：只检查和提醒，不自动更新
+# 用上面探测 github.com 时走通的那条路线查：本机代理 > 有效的环境变量代理 > 代理设置失效时强制直连 > 系统默认。
+# 自检已经选过路线，不再换路线重试；确认连不上 GitHub 时直接记为查不到，不再联网等超时
+if local_px:
+    vc_proxy = local_px
+elif fr and ep and fr.parse_proxy(ep):
+    vc_proxy = ep
+elif dead_cfg and gh_state in ("ok", "slow"):
+    vc_proxy = ""
+else:
+    vc_proxy = None
+vc_offline = None
+if gh_state in ("down", "cert") and not local_px:
+    vc_offline = "github.com " + ("证书不受信" if gh_state == "cert" else "不通")
 try:
     import version_check as vc
-    ver = vc.check()
-    rows.insert(0, ("repo-dissect 版本", "✗" if ver["newer"] else ("✓" if ver["latest"] else "·"), vc.summary(ver)))
+    ver = vc.check(proxy=vc_proxy, retry=False, offline=vc_offline)
+except Exception as e:  # 检查脚本自己出错也要说出来，不能当作"已是最新"
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION"), encoding="utf-8") as f:
+            _loc = f.read().strip()
+    except OSError:
+        _loc = None
+    vc, ver = None, {"status": "unknown", "local": _loc, "latest": None, "newer": None, "advice": [],
+                     "error": f"检查脚本出错 {type(e).__name__}: {e}"[:100], "proxy": None}
+rows.insert(0, ("repo-dissect 版本", {"newer": "✗", "unknown": "✗", "latest": "✓"}.get(ver["status"], "·"),
+                vc.summary(ver) if vc else f"{ver['local'] or '未知'}；最新版本查不到（{ver['error']}）"))
+if ver["status"] != "unknown":  # 查不到时的说明在最后的"技能版本"一行里
     tips[:0] = ver["advice"]
-except Exception:
-    ver = None
 add("文件沙箱", not (fp["mkdir"] or fp["env"]),
     "无限制" if not (fp["mkdir"] or fp["env"]) else "；".join(x for x in (
         "对已存在目录 mkdir 会报错（脚本已兼容）" if fp["mkdir"] else "",
@@ -235,10 +256,20 @@ else:
 if fp["env"] and docker in ("up", "startable") and hub:
     verdict += "；注意本环境拦截 .env 类文件，运行前先在前台执行 run_project.py prepare"
 print("运行项目: " + verdict)
-if ver and ver["newer"]:
-    print(f"技能版本: 当前 {ver['local'] or '1.3.0 或更早'}，GitHub 上已有 {ver['latest']}。在开工那次提问里问用户要不要先更新"
-          f"（附上主要改动）；用户同意就执行 {vc.update_cmd()}，成功后重新读取 SKILL.md、重跑本脚本再开工；"
+cur = ver["local"] or "1.3.0 或更早"
+if ver["status"] == "newer":
+    print(f"技能版本: 当前 {cur}，GitHub 上已有 {ver['latest']}。在开工那次提问里问用户要不要先更新"
+          f"（附上主要改动）；用户同意就执行 {vc.update_cmd(ver['proxy'])}，成功后重新读取 SKILL.md、重跑本脚本再开工；"
           "用户不同意、没回复或无人值守时，继续用当前版本。无论哪种，都在 index.md 记下版本和是否更新过")
+elif ver["status"] == "unknown":
+    print(f"技能版本: 当前 {cur}，GitHub 上的最新版本查不到（{ver['error']}），状态未知，不能当作已是最新。"
+          "在开工那次提问里告诉用户：本地版本、最新版本未知、本次先用当前版本继续。取码成功后复查一次"
+          "（fetch_repo.py 会自动复查并打印\"技能版本复查\"一行；用 git clone 取码、或取码后没看到这一行的，手动执行 "
+          + (vc.check_cmd() if vc else "scripts/version_check.py") + "）；在 index.md 记下检查失败和复查结果")
+elif ver["status"] == "latest":
+    print(f"技能版本: {cur}，已是最新；在开工那次提问里带一句即可")
+else:
+    print(f"技能版本: {cur}，已按 RD_NO_UPDATE_CHECK 跳过检查；在开工那次提问里带一句即可")
 if local_px:
     print(f"取代码: 直连{'慢' if gh_state == 'slow' else '不通'}，经本机代理 {local_px} 可用；用 fetch_repo.py 取码（会自动只对本次命令使用该代理）")
 elif dead_cfg and gh_state in ("ok", "slow"):

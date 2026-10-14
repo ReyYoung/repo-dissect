@@ -2,6 +2,22 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.5.1] - 2026-10-14
+
+In one Codex run the agent did not mention a skill update, while WorkBuddy did. When the version check could not reach GitHub, the script only showed a "skipped" row in the environment table and exited with 0, the same as "up to date". The rules also only asked the agent to speak up when a newer version was found. This release treats "unknown" as its own state.
+
+### Changed
+
+- **"Unknown" is a separate state.** `version_check.py` reports one of: newer available, up to date, unknown, skipped. Unknown exits with 20 (previously 0) and gives the reason.
+- **The result is always printed and always passed on.** The "技能版本" line at the end of `check_env.py` now appears every time, not only when a newer version exists. When the latest version is unknown, the agent tells the user in its first question: local version, latest unknown, carrying on with the current one. The run does not stop for this.
+- **The version check uses the network route found by the environment check.** It goes through a local proxy when direct access fails, and goes direct when a configured proxy is dead, for that one command only. Run on its own, `version_check.py` retries once direct and once through each local proxy after a first failure. A new `--proxy URL|none` option is available, and `--update` reuses the route that worked.
+- **One automatic recheck after fetching code.** An unknown result is recorded in `~/.cache/repo-dissect/version-check.json`. After a successful fetch, `fetch_repo.py` checks again and prints a "技能版本复查" line:
+  - a newer version found: the agent asks whether to update; if the user agrees, it updates, re-reads SKILL.md and carries on (the fetched code is kept);
+  - still unknown: no further retries.
+
+  When the code is fetched with `git clone`, the agent rechecks once by hand as SKILL.md describes.
+- The version field in `index.md` now records the check result: up to date, newer and whether it was installed, or unknown with the reason and the recheck result.
+
 ## [1.5.0] - 2026-10-14
 
 Based on three 1.4.x runs on the same project (WorkBuddy on Mac and Windows, Codex) and Codex's review of them. Every code link in all three reports resolved, yet several conclusions were stronger than the evidence, and summaries contradicted the body. This release adds light rules and script hints, not new ledgers.

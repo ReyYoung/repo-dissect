@@ -56,7 +56,7 @@ Restart the agent if it does not pick up the skill right away.
 
 ### Updating
 
-At the start of each run, the environment check compares your version with the latest one on GitHub. If a newer version exists, the agent lists the main changes in its first question and asks whether to update first. If you agree, it updates, re-reads the skill instructions and starts with the new version; if you decline or the run is unattended, it carries on with the current one. The skill never updates without your consent.
+At the start of each run, the environment check compares your version with the latest one on GitHub. If a newer version exists, the agent lists the main changes in its first question and asks whether to update first. If you agree, it updates, re-reads the skill instructions and starts with the new version; if you decline or the run is unattended, it carries on with the current one. If the check cannot reach GitHub, the agent tells you that the latest version is unknown rather than treating it as up to date, and checks once more after the code has been fetched. The skill never updates without your consent.
 
 You can also update it yourself. A git install is updated with `git pull`; other installs download the new release and keep a backup of the old one in `~/.cache/repo-dissect-backup/`. Local changes in the skill folder are never overwritten.
 

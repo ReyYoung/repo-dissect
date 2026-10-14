@@ -626,6 +626,21 @@ def human(n):
     return f"{n / 1e6:.1f} MB" if n >= 1e5 else f"{n / 1e3:.0f} KB"
 
 
+def recheck_skill_version(proxy, online=True):
+    """开工时查不到本技能最新版本的（check_env.py 记过一笔），用这次走通的网络路线复查一次。
+    这次没连上 github.com（用的压缩包或镜像）时不复查，留到下次"""
+    if not online:
+        return
+    try:
+        sys.dont_write_bytecode = True  # 不在技能目录里生成 __pycache__
+        import version_check as vc
+        line = vc.recheck_pending("" if proxy is None else proxy)
+        if line:
+            log(line)
+    except Exception:
+        pass
+
+
 def main():
     ap = argparse.ArgumentParser(description="取固定 commit 的源码并校验（git clone 不可用或极慢时用）")
     ap.add_argument("repo", help="owner/repo")
@@ -730,6 +745,7 @@ def main():
         log(f"✓ 完成：{len(files)} 个文件" + (f"，跳过 {len(skipped)} 个（见 .rd-manifest.json）" if skipped else "")
             + ("，已逐文件对照 GitHub 清单" if verified else "，未能对照 GitHub 清单"))
         log("· 注意：这不是 git 仓库，没有提交历史——热点文件、git blame、提交统计做不了；社区数据改用 GitHub API")
+        recheck_skill_version(proxy, probe["ok"])
         log(f"取码方式: {source}；commit {sha}；" + ("已校验" if verified else "未校验") + (f"；只取 {', '.join(only)}" if only else ""))
         return 0
 
@@ -789,6 +805,7 @@ def main():
                 if via_git(url, sha, tmp, proxy, a.git_timeout, label):
                     install()
                     log("✓ 完成：git 仓库（含历史）")
+                    recheck_skill_version(proxy, probe["ok"])
                     log(f"取码方式: git clone（{label}）；commit {sha}；git 已按 commit 校验对象")
                     return 0
                 drop_tmp()
