@@ -2,6 +2,28 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.7.1] - 2026-10-15
+
+When Codex and WorkBuddy dissected the same project (Tencent/teamai-cli) with 1.7.0, the four front-page stat cards looked very different. Partly the users picked different mechanisms; partly the rule only said "show 2–3 mechanisms for 架构学习" with no fixed card format, so the same mechanism got two names ("投递对账" vs "交付账本"), and one report showed concrete facts while the other showed concept words that only make sense after reading the body.
+
+### Changed
+
+- **Front-page stats follow a fixed format per primary goal**, always 4 cards:
+  - 架构学习, 写教程, 二次开发: 3 mechanism cards labelled `机制 · <name from the L2 candidate table>`, with the most concrete fact as the big value (a number chain, key constant or decision rule) and the table's "why unique" as the note; mechanisms the user chose come first;
+  - 选型评估, 需求对照: requirement fit, main risk, maintainer risk;
+  - 多项目对比: one card per project; 产品与方案参考: three product designs;
+  - the 4th card is always "root licence · activity", with numbers from `repo_stats.py`.
+- **`report.json` gains a `goal` field** for the primary goal, used by the front-page checks.
+- **`build_report.py` hints:**
+  - a mechanism card whose name is not in the L2 candidate table is flagged, so one mechanism has one name everywhere;
+  - selection advice such as "试点" or "推荐采用" on the front page of a 架构学习 or 写教程 report is flagged.
+
+### Fixed
+
+- ✅ 🔍 ❓ in the front-page conclusion and the notice bar now render as the same "事实 / 推断 / 待确认" tags as the body, instead of raw symbols.
+- `report.example.json` gains `goal`, and its commit count now comes from `repo_stats.py`.
+- Regression tests now number 24.
+
 ## [1.7.0] - 2026-10-15
 
 Based on the retrospectives WorkBuddy and Codex each wrote after dissecting the same project (garrytan/gstack) with 1.6.1. WorkBuddy found several cases where the scripts gave a false "pass", with reproducible cases; the worst was `checklinks.py --fix` rewriting 12 continuation references to the wrong file and still reporting "0 problems". Codex pointed out environment conclusions stated too broadly, report checks not tied to a specific build, and Mermaid packaging being mistaken for rendering.

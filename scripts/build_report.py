@@ -269,6 +269,14 @@ def tag(text, tone="default", small=False):
     return f'<span class="tag{" sm" if small else ""}" style="background:{bg};color:{fg}">{E(text)}</span>'
 
 
+def EM(text):
+    """首屏、提示条这类纯文本：转义后把 ✅🔍❓ 换成和正文一样的标签"""
+    out = E(str(text))
+    for mark, (lbl, tone) in MARKS.items():
+        out = out.replace(mark, tag(lbl, tone, small=True))
+    return out
+
+
 def _retag(body):
     """结论词、✅🔍❓ 转成标签；跳过代码块和行内代码"""
     parts = re.split(r"(<pre>.*?</pre>|<code[^>]*>.*?</code>)", body, flags=re.S)
@@ -492,6 +500,28 @@ for t in _FRONT:
     short = t if len(t) <= 40 else t[:40] + "…"
     HINTS.append(f"首屏结论或关键数字里有「{m.group(0)}」又没写范围：「{short}」——写清在什么范围、用什么方法得出，"
                  "并在 index.md 的关键结论核对表里加一行；撑不起就改弱")
+# 首屏卡片按主目标的固定格式（charts-and-report.md 第 6 节）：
+# 机制卡的名字要用 L2 机制候选表里的原名；架构学习、写教程的首屏不写选型建议
+_GOAL = str(CFG.get("goal") or " ".join(str(x) for x in list(CFG.get("crumbs", [])) + [CFG.get("subtitle", "")]))
+_CAND = ""
+for _p in sorted(OUT.glob("*.md")):
+    _t = _p.read_text(encoding="utf-8", errors="replace")
+    _i = _t.find("机制候选")
+    if _i >= 0:
+        _CAND += _t[_i:]
+for item in CFG.get("stats", []):
+    lbl = str(item[1]) if len(item) > 1 else ""
+    m = re.match(r"\s*机制\s*[·・:：]\s*(.+)", lbl)
+    if m and _CAND and re.sub(r"\s", "", m.group(1)) not in re.sub(r"\s", "", _CAND):
+        HINTS.append(f"首屏机制卡「{m.group(1).strip()}」在 L2 的机制候选表里找不到同名机制：用候选表里的原名，"
+                     "同一个机制在各处叫法一致")
+if re.search(r"架构学习|写教程", _GOAL) and not re.search(r"选型", _GOAL):
+    for t in [str(CFG["verdict"].get("summary", ""))] + [str(x) for x in CFG["verdict"].get("points", [])]:
+        m = re.search(r"试点|推荐采用|建议采用|可以采用|值得引入|适合上线|选型", t)
+        if m:
+            HINTS.append(f"目标是架构学习或写教程，首屏却有选型建议「{m.group(0)}」：改成学习建议（先读什么、学到什么），"
+                         "或请用户把选型评估加为目标")
+            break
 # 技能版本写进页脚和报告说明，方便事后追溯
 if SKILL_VERSION:
     stamp = f"repo-dissect v{SKILL_VERSION}"
@@ -515,7 +545,7 @@ for item in CFG.get("stats", []):  # [数值, 标签, 补充说明?]；写成循
 notice = ""
 if CFG.get("notice"):
     nt = CFG["notice"]
-    notice = (f'<div class="alert {nt.get("tone", "warn")}"><span class="dot">!</span><div>{E(nt["text"])}</div></div>')
+    notice = (f'<div class="alert {nt.get("tone", "warn")}"><span class="dot">!</span><div>{EM(nt["text"])}</div></div>')
 
 CSS = """
 :root{--p50:__P50__;--p100:__P100__;--p600:__P600__;--p700:__P700__;--bg:#F6F7FA;--line:#ECEEF4;--card:#E3E6EE;
@@ -754,8 +784,8 @@ page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <div class="crumb">{crumbs}</div>
 <div class="head"><div><h1>{E(CFG['title'])}</h1><div class="aux">{E(CFG.get('subtitle', ''))}</div></div>
 <button class="btn" data-print>打印 / 导出 PDF</button></div>
-<div class="card verdict"><div>{tag(v['level'], vt)}<h2>{E(v['summary'])}</h2>
-<ol>{''.join(f'<li>{E(p)}</li>' for p in v.get('points', []))}</ol></div>
+<div class="card verdict"><div>{tag(v['level'], vt)}<h2>{EM(v['summary'])}</h2>
+<ol>{''.join(f'<li>{EM(p)}</li>' for p in v.get('points', []))}</ol></div>
 <div class="desc">{meta}</div></div>
 <div class="stats">{stats}</div>
 {notice}

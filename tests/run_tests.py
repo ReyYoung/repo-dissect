@@ -184,6 +184,24 @@ def main():
             shutil.copytree(ex, rep)
             rc, o = run([os.path.join(SCRIPTS, "build_report.py"), rep, "--mermaid", "inline"], base)
             case("build_report inline 提示未做渲染校验", rc == 0 and "没有在生成时渲染过" in o and "字节" in o and "校验码" in o, o)
+
+            # 12. 首屏格式：机制卡用候选表原名；学习目标不写选型建议；提示条里的 ✅ 也转成标签
+            with open(os.path.join(rep, "report.json"), encoding="utf-8") as fh:
+                cfg = json.load(fh)
+            cfg["goal"] = "架构学习"
+            cfg["verdict"]["summary"] = "值得学习，建议内部小范围试点"
+            cfg["stats"][0] = ["10s → 7s", "机制 · 不存在的机制", "说明"]
+            cfg["stats"][1] = ["规则", "机制 · hook 超时预算", "说明"]
+            cfg["notice"] = {"text": "✅ 结论都有出处", "tone": "warn"}
+            with open(os.path.join(rep, "report.json"), "w", encoding="utf-8") as fh:
+                json.dump(cfg, fh, ensure_ascii=False)
+            write(rep, "02-机制.md", "# x\n\n## 机制候选\n\n| 机制 | 说明 |\n|---|---|\n| hook 超时预算 | a |\n")
+            rc, o = run([os.path.join(SCRIPTS, "build_report.py"), rep, "--mermaid", "inline"], base)
+            html_ = open(os.path.join(rep, "report.html"), encoding="utf-8").read()
+            alert = html_[html_.find('<div class="alert warn">'):][:600]
+            case("机制卡名字不在候选表里会提示", "不存在的机制" in o and "hook 超时预算」在 L2" not in o, o)
+            case("学习目标的首屏写选型建议会提示", "首屏却有选型建议「试点」" in o, o)
+            case("提示条里的 ✅ 转成标签", "✅" not in alert and "事实" in alert, alert)
     finally:
         shutil.rmtree(base, ignore_errors=True)
     failed = [r for r in results if not r[1]]
