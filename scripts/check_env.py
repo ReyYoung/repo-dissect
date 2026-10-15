@@ -85,7 +85,12 @@ if shutil.which("docker"):
         add("docker", True, "可用")
     elif st == "denied":
         docker = "stuck"
-        add("docker", False, "已安装，当前用户没有权限访问", "没有 Docker 权限：把用户加入 docker 组，或运行与截图交给用户电脑上的 Agent")
+        add("docker", False, "已安装，当前命令环境没有权限访问",
+            {"darwin": "没有 Docker 权限：多半是 Agent 沙箱限制了访问（Docker Desktop / OrbStack 本身在运行），"
+                       "可按所在环境的方式申请在沙箱外运行，或把运行与截图交给用户电脑上的 Agent",
+             "win32": "没有 Docker 权限：确认 Docker Desktop 已启动、当前用户能使用它，或把运行与截图交给用户电脑上的 Agent"}.get(
+                sys.platform, "没有 Docker 权限：可能是沙箱限制，也可能当前用户不在 docker 组；由用户决定是否调整，"
+                              "或把运行与截图交给用户电脑上的 Agent"))
     else:
         name, cmd = daemon_starter() if daemon_starter else ("", None)
         docker = "startable" if cmd else "stuck"
@@ -103,7 +108,7 @@ if docker != "none":
         hub = True
         add("镜像仓库 Docker Hub", True, "直连不通，但 Docker 配了镜像加速或代理，以实际拉取为准")
     else:
-        add("镜像仓库 Docker Hub", hub, "可访问" if hub else "不可访问",
+        add("镜像仓库 Docker Hub", hub, "可访问" if hub else "当前命令环境不可访问",
             "访问不了 Docker Hub：只有镜像已在本地时才能运行项目，否则交给用户电脑上的 Agent")
 try:
     import playwright  # noqa: F401
@@ -149,7 +154,7 @@ if fr:
             "处理好之前请用户提供本地仓库路径或源码 ZIP（fetch_repo.py --from-archive）")
     else:
         gh_state = "down"
-        add("网络 github.com", False, f"不可访问（{pr['error'][:60]}）")
+        add("网络 github.com", False, f"当前命令环境不可访问（{pr['error'][:60]}）")
     if gh_state in ("slow", "down"):
         lp = fr.local_proxies()
         if lp:
@@ -164,9 +169,10 @@ if fr:
     net_gh = gh_state in ("ok", "slow")
 else:
     net_gh = reach("https://github.com")
-    add("网络 github.com", net_gh, "可访问" if net_gh else "不可访问", "访问不了 GitHub：请用户提供本地仓库路径或代码压缩包")
+    add("网络 github.com", net_gh, "可访问" if net_gh else "当前命令环境不可访问", "访问不了 GitHub：请用户提供本地仓库路径或代码压缩包")
 net_api = reach("https://api.github.com")
-add("网络 api.github.com", net_api, "可访问" if net_api else "不可访问", "访问不了 GitHub API：社区数据标 ❓，注明未采集")
+add("网络 api.github.com", net_api, "可访问" if net_api else "当前命令环境不可访问",
+    "这个命令环境访问不了 GitHub API：先试其他渠道（GitHub 连接器、网页读取工具）；都不行，社区数据标 ❓，注明未采集")
 cpu, mem = os.cpu_count(), mem_gb()
 free = shutil.disk_usage(os.getcwd()).free / 1024 ** 3
 rows.append(("机器", "·", f"{cpu} 核 / {mem if mem else '?'} GB 内存 / 当前目录可用磁盘 {free:.0f} GB"))
@@ -229,7 +235,7 @@ rows.insert(0, ("repo-dissect 版本", {"newer": "✗", "unknown": "✗", "lates
 if ver["status"] != "unknown":  # 查不到时的说明在最后的"技能版本"一行里
     tips[:0] = ver["advice"]
 add("文件沙箱", not (fp["mkdir"] or fp["env"]),
-    "无限制" if not (fp["mkdir"] or fp["env"]) else "；".join(x for x in (
+    "系统临时目录里 mkdir 和 .env 读写未受阻（只测了临时目录，其他路径未检测）" if not (fp["mkdir"] or fp["env"]) else "；".join(x for x in (
         "对已存在目录 mkdir 会报错（脚本已兼容）" if fp["mkdir"] else "",
         ".env 类文件读写被拦" if fp["env"] else "") if x),
     "文件沙箱拦截 .env 类文件：运行项目前先在前台执行 run_project.py prepare（触发授权），再把 run 放到后台；"

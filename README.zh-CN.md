@@ -124,6 +124,14 @@ Claude Code 中用 `/repo-dissect`，也可以直接用自然语言描述任务�
 - 用整包或逐文件下载取到的代码没有提交历史，热点文件统计和 `git blame` 做不了，设计取舍的证据改查 GitHub API，报告里会注明。
 - 结论用于辅助决策，交付客户前请人工复核关键证据。
 
+## 回归测试
+
+`tests/run_tests.py` 专门给脚本喂"明知有问题"的文档（续行归错文件、链接文字和锚点不一致、精读缺少规定内容等），确认每个问题都能被报出来，而不是给出虚假的"通过"。只需要 Python 和 git，在临时目录里离线运行，每次发版前跑一遍：
+
+```bash
+python3 tests/run_tests.py
+```
+
 ## 更新记录
 
 见 [CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)（[English](CHANGELOG.md)）。

@@ -124,6 +124,14 @@ Verdict: **conditionally recommended**. Of 28 sample requirements: 10 met, 12 pa
 - Code fetched as an archive or file by file has no commit history, so hotspot statistics and `git blame` are skipped; design trade-off evidence comes from the GitHub API instead, and the report says so.
 - Results support decisions; review key evidence before delivering to a client.
 
+## Regression tests
+
+`tests/run_tests.py` feeds the scripts documents that are known to be wrong (misattributed continuation references, a link whose text and anchor disagree, a deep dive missing required blocks, and so on) and checks that each problem is reported. It needs only Python and git, runs offline in a temporary folder, and is run before every release:
+
+```bash
+python3 tests/run_tests.py
+```
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) ([简体中文](CHANGELOG.zh-CN.md)).

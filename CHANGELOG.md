@@ -2,6 +2,51 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.7.0] - 2026-10-15
+
+Based on the retrospectives WorkBuddy and Codex each wrote after dissecting the same project (garrytan/gstack) with 1.6.1. WorkBuddy found several cases where the scripts gave a false "pass", with reproducible cases; the worst was `checklinks.py --fix` rewriting 12 continuation references to the wrong file and still reporting "0 problems". Codex pointed out environment conclusions stated too broadly, report checks not tied to a specific build, and Mermaid packaging being mistaken for rendering.
+
+### Added
+
+- **Regression tests, `tests/run_tests.py`**: 21 cases that feed the scripts deliberately broken documents and check each problem is reported. Needs only Python and git, runs offline; the 1.6.1 scripts fail 16 of them.
+- **Link text vs anchor check**: a permalink whose text says `a.py:L182-L186` while the link points to `#L180-L186` is reported (a common slip when a range is edited by hand).
+
+### Fixed
+
+- **Continuation reference attribution.** A continuation used to take the nearest full path anywhere in the same section, even across a table or another paragraph, and could land on the wrong file. Now:
+  - it only uses a path from the same paragraph, table row or list item;
+  - when two different files appear earlier in that block, it reports "ambiguous attribution"; links to other repositories (compare mode, dependencies) and broken references count too, so a continuation never skips past them to an earlier path;
+  - a bare `>` line in a blockquote and the line after a heading also start a new block.
+- **`--fix` no longer rewrites silently**: it lists every rewrite (line numbers match the original file, including after code blocks), lists continuation expansions separately with a reminder to re-read the sentence, runs a read-only check again afterwards, and keeps the file's line endings (CRLF / LF).
+- **Universal-claim list**: when only some documents in a folder are checked, entries for the others are kept instead of the list being overwritten or deleted.
+- **L4 six-block check:**
+  - headings such as "没精读的关键机制" no longer count as the core-mechanism block;
+  - the input/output block is no longer satisfied by a bare "输出";
+  - files named `04_`, `4-` or containing 核心模块 / 精读 are checked too, with a hint to use the `04-` prefix.
+- **`build_report.py` prints the file size in bytes** (it printed a character count) and a content checksum computed from the input files, so it stays the same while the content does.
+
+### Changed
+
+- **When the user picks more mechanisms than the limit**, there is now a defined approach: do not refuse or silently drop any; group them into directions and run "one L3 plus one L4 per direction", telling the user the cost first. Each L4 lists the mechanisms in its own direction that were not covered, and `index.md` records the overall coverage.
+- **When L4 overturns an L2 statement**, L2 is corrected and the L4 notes the difference.
+- **Selection basis**: when deep dives exist, `checklinks.py` hints if the basis reads like the agent's own choice ("我判断", "我决定") or, for a large repo, quotes no words from the user.
+- **The universal-claim list** now also absorbs the separately printed "absolute wording" hint, split into strong and weak, with a count at the top; limits are 8 per document and 40 in total, strong first.
+- **References skipped as port numbers** (`:8080`) are listed so misjudgments can be spotted.
+- **Size threshold**: content-heavy projects with more than about 50,000 Markdown lines count as large; `repo_stats.py` prints a size verdict.
+- **`build_report.py` hints:**
+  - inline mode now says the diagrams were not rendered during the build and should be viewed in a browser before delivery; static mode states that each was rendered;
+  - it flags "等待选题" left in `report.json` when deep dives exist.
+- **Report checks in `index.md`** name the content checksum they apply to; after the content changes, older results are marked as applying to an earlier version. Mermaid rendering and visual checks are recorded separately. The example's `index.md` follows the new format.
+- **`check_env.py` states its scope:**
+  - the file-sandbox row says "temp directory not blocked (other paths not tested)" instead of "unrestricted";
+  - network rows say "not reachable from this command environment";
+  - Docker permission errors get OS-specific advice (on macOS usually a sandbox limit).
+- **Working habits:**
+  - find paths before reading, and keep `git log` to subjects and a limited count;
+  - run key steps separately and check each result;
+  - do not write one-off scripts to assemble the report, and update leftover "等待选题" text after each stage.
+- **README** gains a "Regression tests" section.
+
 ## [1.6.1] - 2026-10-15
 
 Codex, running 1.5.1, again did not offer a skill update, yet updated fine when the user asked it to check. Codex's own diagnosis: the environment check failed inside its sandbox (dead proxy port, DNS failure) and reported "latest version unknown"; afterwards it reached GitHub through its GitHub connector and an approved command outside the sandbox and fetched the source, but never rechecked the skill version. The command environment that runs the scripts can have different network access from the agent's other tools.

@@ -10,6 +10,7 @@ Mermaid 图（流程、时序、状态、ER）两种离线方式：
 """
 import html
 import base64
+import hashlib
 import json
 import re
 import sys
@@ -826,8 +827,12 @@ if MERMAIDS:
         page = page.replace(f"\x00MERMAID{i}\x00", body)
     if rendered is None:  # 内联渲染库，离线打开时在浏览器里渲染
         lib = "<script>" + MERMAID_JS.read_text(encoding="utf-8").replace("</script", "<\\/script") + "</script>\n"
-    mode_used = "static" if rendered else "inline"
-    print(f"Mermaid 图 {len(MERMAIDS)} 张，方式 {mode_used}" + (f"，其中 {bad} 张语法错误" if bad else ""))
+    if rendered:
+        print(f"Mermaid 图 {len(MERMAIDS)} 张，方式 static：已在无头浏览器里逐张渲染" + (f"，其中 {bad} 张语法错误" if bad else "，全部成功"))
+    else:
+        print(f"Mermaid 图 {len(MERMAIDS)} 张，方式 inline：生成时没有渲染校验，打开报告时才在浏览器里渲染")
+        HINTS.append(f"{len(MERMAIDS)} 张 Mermaid 图没有在生成时渲染过（inline 方式）：交付前在浏览器里打开报告逐张看一遍；"
+                     "看不了就在 index.md 写'Mermaid 未做渲染校验'，不要写成'图已通过'")
 page = page.replace("MERMAID_CFG", MERMAID_CFG).replace("<script type=\"module\">", lib + "<script type=\"module\">", 1)
 
 for i, src in enumerate(MERMAIDS):
@@ -837,8 +842,24 @@ for i, src in enumerate(MERMAIDS):
         how = "按阶段拆成几张，只负责转交的中间层写进图注" if kind == "时序图" else "拆图或先把同类步骤聚合"
         HINTS.append(f"第 {i + 1} 张 Mermaid 图（{MERMAID_AT[i]}，{kind}）超过规模上限：{'、'.join(over)}；{how}")
 
-(OUT / "report.html").write_text(page, encoding="utf-8")
-print("report.html", len(page))
+# 阶段状态：已经有核心模块精读，报告里还写着"等待选题"，说明首屏或待确认清单没跟着更新
+if re.search(r"等待选题", json.dumps(CFG, ensure_ascii=False)) and any(
+        re.match(r"0?4[-_ .]", p.name) or (re.match(r"\d", p.name) and ("核心模块" in p.name or "精读" in p.name))
+        for p in OUT.glob("*.md")):
+    HINTS.append("report.json 里还写着「等待选题」，但已经有核心模块精读（04- 文档）：更新首屏、待确认清单和报告说明")
+data = page.encode("utf-8")
+(OUT / "report.html").write_bytes(data)
+# 内容校验码按输入算（report.json、各章文档、img 下的图、Mermaid 方式），输入不变就不变；
+# 不按 HTML 算：static 方式每次渲染的 SVG 细节不同，同样的内容也会得到不同的 HTML
+_h = hashlib.sha256(MODE.encode())
+for _p in [OUT / "report.json"] + [OUT / s_[0] for s_ in CFG["sections"]] + sorted((OUT / "img").glob("*.svg")):
+    try:
+        _h.update(_p.name.encode() + b"\0" + _p.read_bytes())
+    except OSError:
+        pass
+build_id = _h.hexdigest()[:12]
+print(f"report.html {len(data):,} 字节（约 {len(data) / 1048576:.1f} MB），内容校验码 {build_id}（按输入文件计算，内容不变就不变）："
+      "index.md 的报告检查结果写明针对这个校验码；内容改动后校验码会变，旧的检查结果要标「针对旧版本」或重新检查")
 if HINTS:
     print(f"\n交付前请处理以下 {len(HINTS)} 条提示（不影响生成，规则见 references/charts-and-report.md）：")
     for h in HINTS:

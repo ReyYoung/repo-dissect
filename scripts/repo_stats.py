@@ -307,9 +307,6 @@ def main():
         res["history"] = history(src, a.since, mode) if (mode and head) else None
     except Exception as e:
         res["history"] = {"error": str(e)}
-    if a.json:
-        with open(a.json, "w", encoding="utf-8") as f:
-            json.dump(res, f, ensure_ascii=False, indent=1)
 
     # ---- 文本摘要
     print(f"repo-dissect 统计 · {src}" + (f" @ {head[:12]}" if head else "（非 git 目录）" if not mode else "（空仓库）")
@@ -351,7 +348,17 @@ def main():
             print(f"  首位 {h['top1_share']}%，前两位合计 {h['top2_share']}%；疑似别名没有合并")
         for al in h["alias_candidates"][:5]:
             print(f"  · 疑似同一人的不同署名：{' / '.join(al['names'])}（合计 {al['commits']} 次，核实前不要合并计算）")
+    # 规模判定（SKILL.md 第 1 节）：代码行、文件数，以及内容型项目的 Markdown 行
+    code_n, md_n = sum(langs.values()), data.get("Markdown", 0)
+    why = [x for x in (f"代码 {code_n:,} 行 > 5 万" if code_n > 50000 else "",
+                       f"文件 {len(files):,} 个 > 2000" if len(files) > 2000 else "",
+                       f"Markdown {md_n:,} 行 > 5 万（内容型项目，正文主要在文档里）" if md_n > 50000 else "") if x]
+    res["size"] = {"large": bool(why), "reasons": why, "rule": "代码行 > 5 万、文件 > 2000 或 Markdown 行 > 5 万任一满足；下载量另看 fetch_repo.py --dry-run"}
+    print("规模判定：" + ("大仓库（" + "；".join(why) + "），按 SKILL.md 第 0 节先做 L0–L2 再请用户选题"
+                       if why else f"未超过大仓库阈值（代码 {code_n:,} 行、文件 {len(files):,} 个、Markdown {md_n:,} 行）"))
     if a.json:
+        with open(a.json, "w", encoding="utf-8") as f:
+            json.dump(res, f, ensure_ascii=False, indent=1)
         print(f"完整结果：{a.json}")
 
 
