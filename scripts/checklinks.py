@@ -28,9 +28,13 @@
   提示（不影响退出码）:
   - 标了 ✅ 的行里没有行号级代码引用（标题行、表头、同一行写了检索或 git 命令作证据的除外）
   - 绝对化用语（必然、绝对、确保、100% 等），提醒复核证据是否撑得起这么强的说法
+  - 全称句（一律、唯一、只能、从不、无回归等；主流程、精读和 compare.md 里还包括"所有、全部"）写进各文档所在目录的
+    _全称句清单.txt（每份文档最多 12 句、每个目录最多 60 句；已写明范围、带 ❓ 或"是否"的句子不列；
+    没有全称句时删掉旧清单），交付前逐条对照同章正文、表格和待确认清单
 对比模式下对每个仓库各运行一次（compare.md 每次都带上）。发现问题时退出码为 1。
 """
 import json
+from collections import Counter
 import os
 import re
 import subprocess
@@ -131,7 +135,12 @@ HEADING = re.compile(r"(?m)^#{1,6}\s")
 # 指向目录的永久链接（.../tree/<sha>/dir），算作有出处
 TREELINK = re.compile(r"https://github\.com/[^/\s]+/[^/\s]+/tree/[0-9a-f]{7,40}/")
 FENCE = re.compile(r"^```.*?^```", re.S | re.M)
-CMD_EVIDENCE = re.compile(r"`(?:git|gh|rg|grep|find|ls|wc|tokei|cloc|curl|docker)\s[^`]+`")
+CMD_EVIDENCE = re.compile(r"`(?:git|gh|rg|grep|find|ls|wc|tokei|cloc|curl|docker)\s[^`]+`|`[^`]*repo_stats\.py[^`]*`|_stats\.json")
+UNIVERSAL = re.compile(r"一律|唯一|只能|只有|从不|永远|始终|总是|绝不|没有任何|无任何|全都|均会|只进不出|无回归|没有测试|无测试|不存在|完全")
+UNIVERSAL_DEEP = re.compile(r"所有|全部")  # 只在 03-、04- 文档里算：这两个词在描述性章节里太常见
+SCOPED = re.compile(r"在.{0,20}(范围|中|里|内)|范围内|检索|扫描|未找到|没找到|本 ?commit|默认|按.{0,10}(统计|口径)|口径")
+universal = []  # (文件, 行号, 句子, 排序键)
+univ_dirs = set()  # 扫描过全称句的目录：没有全称句时也要清掉旧清单
 ABSOLUTE = re.compile(r"必然|绝对|确保|保证|(?:100\s*%|百分之百)\s*(?:的)?\s*(?:可靠|准确|正确|安全|可信|成功|兼容|命中|保证)|零风险|毫无风险|万无一失|彻底解决|完全不会|一定会")
 # 不能当证据的行：空行、只有括号/标点；以及文件第 1 行的 import、package、shebang 等文件开头内容
 TRIVIAL = re.compile(r"^\s*[{}\[\]();,]*\s*$")
@@ -303,6 +312,26 @@ for f in files:
             weak.append(s_)
         if ABSOLUTE.search(re.sub(r"`[^`]*`", "", ln)):
             strong.append(s_)
+    # 全称句：按原文行号记录，跳过代码块、标题、表格分隔行，以及本来就是疑问的句子（带 ❓ 或"是否"）
+    name_ = os.path.basename(f)
+    if re.match(r"\d", name_) or name_ == "compare.md":
+        univ_dirs.add(os.path.dirname(os.path.abspath(f)))
+        deep = name_[:3] in ("03-", "04-") or name_ == "compare.md"
+        fence = None
+        for no, ln in enumerate(text.split("\n"), 1):
+            s_ = ln.strip()
+            fm = re.match(r"(```|~~~)", s_)
+            if fm:
+                fence = None if fence == fm.group(1) else (fence or fm.group(1))
+                continue
+            if fence or not s_ or s_.startswith("#") or re.fullmatch(r"\|[\s:|-]+\|?", s_) or "❓" in s_ or "是否" in s_:
+                continue
+            plain = re.sub(r"`[^`]*`", "", re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", ln))
+            m_ = UNIVERSAL.search(plain) or (deep and UNIVERSAL_DEEP.search(plain))
+            if m_ and not SCOPED.search(plain):
+                weak_word = m_.group(0) in ("只有", "完全", "所有", "全部", "不存在")
+                rank = (0 if deep else 1, 1 if weak_word else 0)
+                universal.append((f, no, re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", s_), rank))  # 链接只留文字
     refs_total += n
     bad_total += len(bad)
     print(f"{f}: {n} 条引用，{len(bad)} 条有问题" + (f"，已改写 {len(edits)} 条为永久链接" if edits else ""))
@@ -318,6 +347,34 @@ for f in files:
         print(f"    提示：{len(strong)} 处绝对化用语，请确认证据撑得起这么强的说法，撑不起就改弱，例如：")
         for ln in strong[:3]:
             print("      ·", ln[:100])
+# 全称句清单：每个目录一份，交付前逐条对照（只提示，不影响退出码）
+for out_dir in sorted(univ_dirs):
+    path_ = os.path.join(out_dir, "_全称句清单.txt")
+    items = [u for u in universal if os.path.dirname(os.path.abspath(u[0])) == out_dir]
+    if not items:
+        if os.path.isfile(path_):
+            try:
+                os.remove(path_)
+                print(f"提示：{out_dir} 已没有全称句，删掉了旧的 _全称句清单.txt")
+            except OSError:
+                pass
+        continue
+    per_file, keep = Counter(), []
+    for u in sorted(items, key=lambda x: x[3]):  # 主流程、精读和对比文档在前，强全称词在前
+        if per_file[u[0]] < 12 and len(keep) < 60:
+            per_file[u[0]] += 1
+            keep.append(u)
+    try:
+        with open(path_, "w", encoding="utf-8") as fh:
+            fh.write("全称句清单（checklinks.py 生成）：逐条对照同一章的正文、表格、待确认清单和首屏；"
+                     "前后矛盾的改掉，撑不起的写明范围或改弱（见 references/layers.md 常见误判清单）。\n\n")
+            for fn, no, ln, _ in keep:
+                fh.write(f"{os.path.basename(fn)}:{no}\t{ln[:200]}\n")
+            if len(items) > len(keep):
+                fh.write(f"\n……另有 {len(items) - len(keep)} 句未列出（每份文档最多 12 句、共 60 句）\n")
+        print(f"提示：{len(items)} 句全称说法已列入 {path_}，交付前逐条对照同章正文、表格和待确认清单")
+    except OSError as e:
+        print(f"提示：{len(items)} 句全称说法，清单写不进 {out_dir}（{e}）")
 # 关键结论核对表：首屏结论要从这张表里来（只提示，不影响退出码）
 for d in sorted({os.path.dirname(os.path.abspath(f)) for f in files
                  if re.match(r"\d", os.path.basename(f)) and os.path.isfile(f)}):

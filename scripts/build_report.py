@@ -328,9 +328,9 @@ def convert(md_text, sec_id, label):
         n[0] += 1
         return f'<{m.group(1)} id="{sec_id}-{n[0]}">'
     body = re.sub(r"<(h[234])>", hid, body)
-    # "附录：完整功能清单" 之类的长附录折叠起来（文件里的 ## 或 ### 标题）
+    # "附录：完整功能清单"、"证据明细" 之类的长内容折叠起来（文件里的 ## 或 ### 标题）
     for lv, stop in (("4", "234"), ("3", "23")):
-        body = re.sub(rf'<h{lv} id="[^"]+">(附录[^<]*)</h{lv}>(.*?)(?=<h[{stop}] |$)',
+        body = re.sub(rf'<h{lv} id="[^"]+">((?:[\d.、\s]+)?(?:附录|证据明细)[^<]*)</h{lv}>(.*?)(?=<h[{stop}] |$)',
                       lambda m: f'<details class="collapse"><summary>{m.group(1)}</summary>{m.group(2)}</details>',
                       body, flags=re.S)
     return body
@@ -469,14 +469,19 @@ for item in CFG.get("stats", []):
     if m:
         HINTS.append(f"首屏关键数字「{item[1]}」像是报告的制作指标（{m.group(0)}），"
                      "应放进 about（报告说明）；首屏只放项目本身的事实")
-_ALL = re.compile(r"全部|所有|唯一|没有|只能|不会|一律|完全|从不|永远|必然|绝对|保证|确保")
+_ALL = re.compile(r"全部|所有|唯一|没有|只能|不会|一律|完全|从不|永远|必然|绝对|保证|确保|无回归|只进不出|无测试")
 _SCOPE = re.compile(r"在.{0,20}(范围|中|里|内)|范围|检索|扫描|未找到|没找到|本 ?commit|默认|根目录|开源版|社区版|按")
 try:
     _INDEX = (OUT / "index.md").read_text(encoding="utf-8")
 except OSError:
     _INDEX = ""
-for t in [CFG["verdict"].get("summary", "")] + list(CFG["verdict"].get("points", [])):
-    t = str(t)
+_FRONT = [str(CFG["verdict"].get("summary", ""))] + [str(x) for x in CFG["verdict"].get("points", [])]
+for item in CFG.get("stats", []):  # 关键数字的标签和补充说明也算首屏结论（如"核心路径无回归保护"）
+    vals = list(item)[:3]
+    if vals and re.search(r"\d", str(vals[0])):
+        vals = vals[1:]  # 数值本身不查；"无""全部"这类文字型数值要查
+    _FRONT.append("；".join(str(x) for x in vals if x))
+for t in _FRONT:
     m = _ALL.search(t)
     if not m or _SCOPE.search(t):
         continue
@@ -484,7 +489,7 @@ for t in [CFG["verdict"].get("summary", "")] + list(CFG["verdict"].get("points",
     if key and key in re.sub(r"\s", "", _INDEX):
         continue  # 核对表里已有这条
     short = t if len(t) <= 40 else t[:40] + "…"
-    HINTS.append(f"首屏结论里有「{m.group(0)}」又没写范围：「{short}」——写清在什么范围、用什么方法得出，"
+    HINTS.append(f"首屏结论或关键数字里有「{m.group(0)}」又没写范围：「{short}」——写清在什么范围、用什么方法得出，"
                  "并在 index.md 的关键结论核对表里加一行；撑不起就改弱")
 # 技能版本写进页脚和报告说明，方便事后追溯
 if SKILL_VERSION:

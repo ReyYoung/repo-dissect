@@ -12,7 +12,7 @@ An agent skill for dissecting open-source projects. Give it a GitHub link or a l
 - **Technical view**: modules and layers, core abstractions, main-flow call chain, core-module deep dives (picked from a ranked table of candidate mechanisms; each covers inputs and outputs, the core mechanism, failure boundaries, trade-offs, where it applies, and technical debt), reuse assessment (with a component-by-component check of whether the database, middleware and model APIs can be swapped for domestic Chinese products, and at what cost, when the scenario requires it).
 - **Selection assessment**: feature fit, license deep-dive, project health, security, deployment and localization / offline constraints, alternatives, with a recommend / conditional / not-recommended verdict.
 - **Requirement-fit matrix**: given a requirement list or tender document, rates each item as met / partially met / needs custom development / enterprise only / not met.
-- **Traceable**: every claim links to code lines at a pinned commit and is marked ✅ fact / 🔍 inference / ❓ unconfirmed; links are verified automatically before delivery. Key conclusions are checked against "can the code prove it, is there a counter-example", and anything not confirmed goes into an open-questions list.
+- **Traceable**: every claim links to code lines at a pinned commit and is marked ✅ fact / 🔍 inference / ❓ unconfirmed; links are verified automatically before delivery. Key conclusions are checked against "can the code prove it, is there a counter-example", and anything not confirmed goes into an open-questions list. Repository statistics (size, commits, author share, tests and CI) come from a script with fixed definitions, so different agents get the same numbers for the same commit.
 - **Works on a poor connection**: when GitHub is slow or unreachable, the code is fetched as one archive or file by file instead of `git clone`, and every file is verified against the pinned commit. A local proxy is detected and used for that command only; a mirror you configure yourself is supported.
 - **Run and screenshot with one choice**: checks whether this machine can run the project (Docker, images, memory, ports, host permissions the project asks for) and shows a decision card; after you choose once, it starts the project, screenshots the feature pages and cleans up. When the current environment can't run it (e.g. a cloud sandbox), it writes a one-line prompt to hand off to the agent on your own computer.
 - **Safe**: instructions aimed at AI inside the analyzed repo are never executed; secrets are never copied; the project runs only in containers, from a copy of the code, with a time limit, and cleanup removes only what this run created.
@@ -58,7 +58,13 @@ Restart the agent if it does not pick up the skill right away.
 
 At the start of each run, the environment check compares your version with the latest one on GitHub. If a newer version exists, the agent lists the main changes in its first question and asks whether to update first. If you agree, it updates, re-reads the skill instructions and starts with the new version; if you decline or the run is unattended, it carries on with the current one. If the check cannot reach GitHub, the agent tells you that the latest version is unknown rather than treating it as up to date, and checks once more after the code has been fetched. The skill never updates without your consent.
 
-You can also update it yourself. A git install is updated with `git pull`; other installs download the new release and keep a backup of the old one in `~/.cache/repo-dissect-backup/`. Local changes in the skill folder are never overwritten.
+**One-line update**: to update at any time, send this to your agent:
+
+```text
+Update the installed repo-dissect skill to the latest version on GitHub: run scripts/version_check.py --update in the skill folder; if that script is missing (version 1.3.0 or earlier), reinstall from https://github.com/ReyYoung/repo-dissect. Then tell me the version before and after.
+```
+
+**Manual update**: a git install is updated with `git pull`; other installs download the new release and keep a backup of the old one in `~/.cache/repo-dissect-backup/`. Local changes in the skill folder are never overwritten.
 
 ```bash
 python3 <skill folder>/scripts/version_check.py --update

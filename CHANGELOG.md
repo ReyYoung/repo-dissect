@@ -2,6 +2,39 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.6.0] - 2026-10-15
+
+Based on two 1.5.x reports on the same project (Open WebUI, same commit and goal) by Codex and WorkBuddy, and a review that checked each disputed claim against the source. Every code link in both reports resolved, yet they still had inconsistent statistics, local observations turned into universal claims, different execution paths treated as one, function definitions cited without checking the call path, and contradictions within a chapter. This release moves the error-prone steps into scripts or fixed procedures.
+
+### Added
+
+- **`scripts/repo_stats.py`: repository statistics with fixed definitions.** Run once at the start of L0; results are saved to `_stats.json`, and the report takes these numbers from it:
+  - file count, and physical lines per language (lock files, vendored directories, minified output and translation files listed separately);
+  - commits in the last year, with the window anchored to the HEAD commit date, so a given commit always gives the same result;
+  - author share, with all commits in the window as the denominator; suspected aliases are listed, not merged;
+  - tests: test code and test fixtures counted separately; CI steps that run tests, and steps that call another repo's workflow or check out a separate test repo.
+- **Universal-claim list.** `checklinks.py` writes sentences with universal wording (一律, 唯一, 只能, 从不, 无回归…; in main-flow and deep-dive docs also 所有, 全部) to `_全称句清单.txt`, up to 60, skipping those that state a scope. Before delivery each is checked against the same chapter's body, tables and open questions. Spot checks after merging subagent work also pick from it.
+
+### Changed
+
+- **Three new rows in the negative and universal claims table of the common-misjudgment list:**
+  - "no tests / no regression coverage": check CI and external test repos; few in-repo tests only supports "few in-repo tests";
+  - "X is the only deciding field": read the whole branch and list every field involved;
+  - "failures always return X / such requests always take path Y": check each error site and each path.
+
+  The "only freed by restart" row now also covers caches and registries that "only grow".
+- **Path variants.** The L2 mechanism table gets a "path variants" column (default / legacy / deployment variant / per backend). L3 and L4 claims say which path they describe, and list every condition that selects a path.
+- **Call relations must cite the call site.** Citing only the callee's definition does not show that the path calls it. L4 core mechanisms are traced through register → select → execute → result → release.
+- **Maintainer concentration** uses all commits in the window as the denominator and states the window; suspected aliases are not merged until verified.
+- **Front-page stats follow the primary goal.** For 架构学习 and 写教程, show 2–3 key mechanisms worth learning instead of stack names. Verification notes such as V0 appear once, in the front-page notice and the report notes.
+- **`build_report.py`:**
+  - the universal-wording hint now also covers front-page stat labels and notes;
+  - sections whose heading starts with 「证据明细」 are collapsed, so the body keeps short conclusions and long evidence lists go there.
+- **`index.md`** gains two fields: the agent and model used (when available) and the statistics window.
+- **Other places now share the same numbers:** the size threshold and the hotspot window use `repo_stats.py`; `_vars.sh` gains `SRC` (the source directory).
+- **The example report's** commit, author and concentration figures now come from `repo_stats.py`.
+- **README**: the Updating section adds a one-line update prompt to send to your agent.
+
 ## [1.5.1] - 2026-10-14
 
 In one Codex run the agent did not mention a skill update, while WorkBuddy did. When the version check could not reach GitHub, the script only showed a "skipped" row in the environment table and exited with 0, the same as "up to date". The rules also only asked the agent to speak up when a newer version was found. This release treats "unknown" as its own state.
