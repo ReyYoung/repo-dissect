@@ -2,6 +2,19 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.6.1] - 2026-10-15
+
+Codex, running 1.5.1, again did not offer a skill update, yet updated fine when the user asked it to check. Codex's own diagnosis: the environment check failed inside its sandbox (dead proxy port, DNS failure) and reported "latest version unknown"; afterwards it reached GitHub through its GitHub connector and an approved command outside the sandbox and fetched the source, but never rechecked the skill version. The command environment that runs the scripts can have different network access from the agent's other tools.
+
+### Changed
+
+- **Try other channels before giving up.** When the check cannot reach GitHub, the agent first checks another way: a GitHub connector or API tool on `repos/ReyYoung/repo-dissect/tags`, a web-reading tool on the tags page, or rerunning `version_check.py` with network permission as the environment allows. Only if all of these fail does it tell the user the latest version cannot be confirmed. The check output, recheck message and SKILL.md all say this.
+- **The post-fetch recheck no longer depends on a saved record.** Previously it ran only if an "unknown" result had been saved at the start; in a sandbox the home directory is often read-only, nothing was saved, and the recheck never ran. Now:
+  - the record falls back to the system temp directory when `~/.cache` is not writable;
+  - after a successful fetch, `fetch_repo.py` rechecks whenever no recent definite result is found.
+- **Manual recheck:** when the code was fetched with git clone or another channel, run `version_check.py` the same way the fetch succeeded (same network permission, same tool).
+- The version result in `index.md` now lists which channels were tried.
+
 ## [1.6.0] - 2026-10-15
 
 Based on two 1.5.x reports on the same project (Open WebUI, same commit and goal) by Codex and WorkBuddy, and a review that checked each disputed claim against the source. Every code link in both reports resolved, yet they still had inconsistent statistics, local observations turned into universal claims, different execution paths treated as one, function definitions cited without checking the call path, and contradictions within a chapter. This release moves the error-prone steps into scripts or fixed procedures.

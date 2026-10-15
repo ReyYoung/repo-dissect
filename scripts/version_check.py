@@ -56,6 +56,10 @@ def local_version(d=SKILL_DIR):
 
 PROXY_ENV = ("https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY", "all_proxy", "ALL_PROXY")
 STATE = os.path.join(os.path.expanduser("~"), ".cache", "repo-dissect", "version-check.json")
+# 沙箱里家目录常常不可写，退回系统临时目录；都写不了时，取码后照样复查（见 recheck_pending）
+STATES = (STATE, os.path.join(tempfile.gettempdir(), "repo-dissect-version-check.json"))
+CHANNELS = (f"GitHub 连接器或 API 工具查 repos/{REPO}/tags；网页读取工具打开 https://github.com/{REPO}/tags；"
+            "或按所在环境的方式申请联网权限后重跑本脚本（例如 Codex 沙箱外运行）")
 
 
 def opener(proxy=None):
@@ -170,7 +174,7 @@ def parse_changes(text, local, limit=6):
         if b:
             head = re.sub(r"`", "", b.group(1)).strip().rstrip("。.：:")
             if len(head) <= 4 and b.group(2):  # 标题太短（如"数字"），补上后面半句
-                head += "：" + re.split(r"[。；，,]", re.sub(r"[`*]", "", b.group(2)))[0].strip()
+                head += "：" + re.split(r"[。；，,]", re.sub(r"[`*]", "", b.group(2)).lstrip("：: "))[0].strip()
             return head
         return re.split(r"[。；:：]", re.sub(r"[`*]", "", t))[0].strip().rstrip("。.：:")
 
@@ -245,27 +249,41 @@ def route_name(proxy):
 
 
 def save_state(res, rechecked=False):
-    """写到临时文件再替换，避免别的进程读到写了一半的文件；家目录不可写时静默跳过"""
-    try:
-        d = os.path.dirname(STATE)
-        os.makedirs(d, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=d, prefix=".vc-", suffix=".json")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump({"status": res["status"], "local": res["local"], "latest": res["latest"],
-                       "error": res.get("error", ""), "ts": time.time(), "rechecked": rechecked}, f, ensure_ascii=False)
-        os.replace(tmp, STATE)
-    except Exception:
-        pass
+    """写到临时文件再替换，避免别的进程读到写了一半的文件；家目录不可写时改写系统临时目录，都不行就跳过"""
+    data = {"status": res["status"], "local": res["local"], "latest": res["latest"],
+            "error": res.get("error", ""), "ts": time.time(), "rechecked": rechecked}
+    for path in STATES:
+        try:
+            d = os.path.dirname(path)
+            os.makedirs(d, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=d, prefix=".vc-", suffix=".json")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            os.replace(tmp, path)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def load_state():
+    """各个位置里最新的一条记录；没有返回 None"""
+    best = None
+    for path in STATES:
+        try:
+            with open(path, encoding="utf-8") as f:
+                st = json.load(f)
+        except Exception:
+            continue
+        if not best or st.get("ts", 0) > best.get("ts", 0):
+            best = st
+    return best
 
 
 def pending_recheck(max_age=12 * 3600):
     """开工时查不到、还没复查过、且不太久的记录"""
-    try:
-        with open(STATE, encoding="utf-8") as f:
-            st = json.load(f)
-    except Exception:
-        return False
-    return st.get("status") == "unknown" and not st.get("rechecked") and time.time() - st.get("ts", 0) <= max_age
+    st = load_state()
+    return bool(st) and st.get("status") == "unknown" and not st.get("rechecked") and time.time() - st.get("ts", 0) <= max_age
 
 
 def check(proxy=None, retry=True, persist=True, offline=None, recheck=False):
@@ -307,9 +325,10 @@ def check(proxy=None, retry=True, persist=True, offline=None, recheck=False):
     elif status == "unknown" and recheck:
         advice.append(f"这是复查，仍查不到：不再重试，本次继续用 {local or '当前版本'}，在 index.md 记下\"版本检查失败、复查仍失败\"")
     elif status == "unknown":
-        advice.append(f"查不到最新版本不等于已是最新：开工时告诉用户本地版本 {local or '未知'}、最新版本未知、本次继续用当前版本；"
-                      f"取码成功后复查一次（fetch_repo.py 会自动复查；用 git clone 取码、或没看到\"技能版本复查\"一行的，"
-                      f"手动执行 {check_cmd()}），只复查一次")
+        advice.append(f"查不到最新版本不等于已是最新，也只说明这个命令环境连不上：先用你能用的其他渠道查一次（{CHANNELS}），"
+                      f"把最高的正式版本号和本地 {local or '版本'} 比较；都查不到，才告诉用户最新版本暂时无法确认、本次继续用当前版本")
+        advice.append(f"取码成功后再复查一次：fetch_repo.py 会自动复查；用 git clone 或其他渠道取码、或没看到\"技能版本复查\"一行的，"
+                      f"用取码时走通的那种方式执行 {check_cmd()}")
     elif dirty:
         advice.append(f"技能目录里有 {len(dirty)} 个文件被改过，和发布版不一致；拆解时请不要修改技能自身的文件，"
                       "发现脚本问题记进 index.md 反馈给作者")
@@ -335,20 +354,25 @@ def summary(res):
 
 
 def recheck_pending(proxy=None, max_age=12 * 3600):
-    """开工时查不到最新版本、且还没复查过时，复查一次（fetch_repo.py 取码成功后调用）。
-    返回要打印的一行；不需要复查时返回 None"""
-    if os.environ.get("RD_NO_UPDATE_CHECK") or not pending_recheck(max_age):
+    """fetch_repo.py 取码成功后调用：开工时查不到、还没复查过，或者根本没有检查记录（没运行检查，或环境不允许写记录）
+    时，用这次走通的网络复查一次。返回要打印的一行；不需要复查时返回 None"""
+    if os.environ.get("RD_NO_UPDATE_CHECK"):
         return None
+    st = load_state()
+    fresh = st and time.time() - st.get("ts", 0) <= max_age
+    if fresh and not pending_recheck(max_age):
+        return None  # 近期已有确定结果，或已经复查过
+    why = "开工时查不到" if fresh else "开工时的检查结果没有记录（可能没运行检查，或环境不允许写记录）"
     res = check(proxy=proxy, retry=False, recheck=True)
     if res["status"] == "newer":
-        return (f"技能版本复查: 开工时查不到，现在查到 GitHub 上已有 {res['latest']}（当前 {res['local']}）。"
+        return (f"技能版本复查: {why}，现在查到 GitHub 上已有 {res['latest']}（当前 {res['local']}）。"
                 f"告诉用户并问要不要更新" + (f"（主要改动：{'；'.join(res['changes'][:4])}）" if res["changes"] else "")
                 + f"；同意就执行 {update_cmd(res['proxy'])}，成功后重新读取 SKILL.md 再接着做（已取的代码不用重取）；"
                   "不同意、没回复或无人值守就继续用当前版本。在 index.md 记下复查结果")
     if res["status"] == "latest":
-        return f"技能版本复查: 开工时查不到，现在确认 {res['local']} 已是最新。在 index.md 记下复查结果"
-    return (f"技能版本复查: 仍查不到最新版本（{res['error']}），不再重试；本次继续用 {res['local'] or '当前版本'}，"
-            "在 index.md 记下\"版本检查失败、复查仍失败\"")
+        return f"技能版本复查: {why}，现在确认 {res['local']} 已是最新。在 index.md 记下复查结果"
+    return (f"技能版本复查: 仍查不到最新版本（{res['error']}）。如果还没用其他渠道查过，先查一次（{CHANNELS}）；"
+            f"都失败才算无法确认，本次继续用 {res['local'] or '当前版本'}，在 index.md 记下查过哪些渠道")
 
 
 # ---------------------------------------------------------------- 更新
