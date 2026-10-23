@@ -43,6 +43,9 @@ def make_repo(base):
         "tests/test_x.py": "def test_x():\n    assert True\n",
         "tests/fixtures/sample.py": "DATA = 1\n",
         "tests/fixtures/data.json": "{}\n",
+        "package.json": '{"name": "x", "dependencies": {"openai": "^4.0.0", "react": "^18"}}\n',
+        "skills/demo/SKILL.md": "---\nname: demo\ndescription: demo skill\n---\n# Demo\n",
+        "src/hooks/useThing.ts": "export const useThing = () => 1;\n",
         ".github/workflows/ci.yml": ("name: ci\non: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n"
                                      "      - uses: actions/checkout@v4\n      - run: pip install pytest pytest-cov\n"
                                      "      - run: which pytest || echo none\n      - run: pytest -q\n"
@@ -176,6 +179,62 @@ def main():
         case("repo_stats 把 fixtures 下的 .py 算测试素材", st["tests"]["code_files"] == 1 and st["tests"]["fixture_files"] == 2, o)
         case("repo_stats 不把安装、跳过测试的命令算成跑测试", steps == ["- run: pytest -q"], json.dumps(steps, ensure_ascii=False))
         case("repo_stats 给出规模判定", st.get("size", {}).get("large") is False and "规模判定" in o, o)
+
+        case("repo_stats 找到大模型依赖和技能文件", "openai" in st["ai"]["sdk"] and st["ai"]["assets"].get("技能（SKILL.md）") == 1
+             and "hook" not in st["ai"]["assets"], json.dumps(st["ai"], ensure_ascii=False))
+
+        # 10b. AI 项目：画像没写 AI 形态要提示；写了 Agent 型、技术架构没有 Harness 清单要提示；长代码块要提示
+        ai_dir = os.path.join(base, "ai")
+        os.makedirs(ai_dir)
+        g0 = write(ai_dir, "00-画像.md", f"## x\n\n这是一个调用大模型的项目 [a/one.ts:L1]({P}/a/one.ts#L1)\n")
+        rc, o = checklinks(src, sha, ai_dir, g0)
+        case("AI 项目画像没写 AI 形态会提示", "没写「AI 形态」" in o, o)
+        write(ai_dir, "00-画像.md", f"## x\n\nAI 形态：Agent 型 [a/one.ts:L1]({P}/a/one.ts#L1)\n")
+        code = "\n".join(f"line{i}" for i in range(20))
+        g2 = write(ai_dir, "02-技术架构.md", f"## x\n\n见 [a/one.ts:L2]({P}/a/one.ts#L2)\n\n```python\n{code}\n```\n\n```mermaid\nflowchart LR\n{code}\n```\n")
+        rc, o = checklinks(src, sha, ai_dir, g0, g2)
+        case("Agent 型缺 Harness 清单会提示", "Harness 清单" in o, o)
+        case("超过 15 行的代码块会提示（mermaid 不算）", "1 段代码超过 15 行（20 行）" in o, o)
+
+        # 10c. AI 线索的误报和漏报：只读依赖段；第三方目录、文档目录、根目录的开发用 Agent 配置不算资产
+        fx = os.path.join(base, "aifx")
+        for rel, body in {
+            "pyproject.toml": '[project]\nname = "x"\nkeywords = ["ai", "openai"]\ndependencies = [\n  "langchain_openai>=0.1",\n]\n',
+            "requirements.txt": "# transformers is not used\nllama_index.core==0.10\n",
+            "go.mod": "module x\n\nrequire (\n\tgithub.com/openai/openai-go/v2 v2.0.0\n)\n",
+            "node_modules/y/SKILL.md": "---\ndescription: vendored\n---\n",
+            "docs/agents/zabbix.md": "# Zabbix agent\n", "docs/commands/install.md": "# install\n",
+            "src/hooks/config.json": "{}\n", ".claude/agents/dev.md": "# dev helper\n",
+        }.items():
+            os.makedirs(os.path.dirname(os.path.join(fx, rel)) or fx, exist_ok=True)
+            write(fx, rel, body)
+        rc, o = run([os.path.join(SCRIPTS, "repo_stats.py"), fx, "--json", os.path.join(base, "fx.json")], base)
+        fa = json.load(open(os.path.join(base, "fx.json"), encoding="utf-8"))["ai"]
+        case("AI 线索只读依赖段，名字按规范化比对", sorted(fa["sdk"]) == ["github.com/openai/openai-go", "langchain_openai", "llama_index.core"],
+             json.dumps(fa["sdk"], ensure_ascii=False))
+        case("第三方目录、文档目录、开发用 Agent 配置不算 Agent 资产", fa["assets"] == {} and fa["dev_agent_config_files"] == 1,
+             json.dumps(fa, ensure_ascii=False))
+
+        # 10d. 四个反引号的代码块成对识别；AI 形态的提示只看这一行、混合型只要求主形态的专项
+        fence_dir = os.path.join(base, "fence")
+        os.makedirs(fence_dir)
+        g3 = write(fence_dir, "03-主流程.md", f"## x\n\n见 [a/one.ts:L2]({P}/a/one.ts#L2)\n\n````md\n```bash\n{code}\n```\n````\n\n"
+                   "````\nshort\n````\n\n" + "\n".join(f"正文 {i}" for i in range(20)) + "\n\n```bash\nls\n```\n")
+        rc, o = checklinks(src, sha, fence_dir, g3)
+        case("四个反引号的代码块成对识别", "1 段代码超过 15 行（22 行）" in o, o)
+        for sub, t00, t02, want, unwanted in (
+            ("ua", "## x\n\n请求头带 User-Agent，部署 SSH Agent", "", None, "AI 形态"),
+            ("mix", "## x\n\nAI 形态：混合型，嵌入型为主，次形态是 Agent 型", "## AI 链路表\n", None, "Harness"),
+            ("mix2", "## x\n\nAI 形态：混合型", "## y\n", "没写哪种为主", None),
+            ("none", "## x\n\nAI 形态：非 AI（既不是嵌入型也不是 Agent 型）\n\n判断 Agent 型要看循环", "## y\n", None, "提示：画像"),
+        ):
+            dd = os.path.join(base, "form-" + sub)
+            os.makedirs(dd)
+            fs = [write(dd, "00-画像.md", t00 + f"\n\n见 [a/one.ts:L1]({P}/a/one.ts#L1)\n")]
+            if t02:
+                fs.append(write(dd, "02-技术架构.md", t02))
+            rc, o = checklinks(src, sha, dd, *fs)
+            case(f"AI 形态提示：{sub}", (want is None or want in o) and (unwanted is None or unwanted not in o), o)
 
         # 11. build_report：inline 方式要提示没做渲染校验、字节数带单位
         ex = os.path.join(ROOT, "examples", "ragflow")

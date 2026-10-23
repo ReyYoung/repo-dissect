@@ -36,6 +36,8 @@
     每份文档最多 8 句、每个目录最多 40 句，强档优先；已写明范围、带 ❓ 或"是否"的句子不列；没有时删掉旧清单
   - 被当成端口号跳过的 `:8080` 这类写法会列出来，确认不是行号
   - 选题依据像是 Agent 自己定的（"我判断""我决定"），或大仓库没有引用用户原话 → 提示
+  - 02–05 分层文档里超过 15 行的代码块（不算空行和 mermaid） → 提示（用文字和图讲机制，代码只留关键几行）
+  - AI 项目的画像没写「AI 形态」，或主形态是 Agent 型 / 嵌入型、技术架构里却没有 Harness 清单 / AI 链路表 → 提示
 对比模式下对每个仓库各运行一次（compare.md 每次都带上）。发现问题时退出码为 1。
 """
 import bisect
@@ -391,9 +393,9 @@ for f in files:
         fence = None
         for no, ln in enumerate(text.split("\n"), 1):
             s_ = ln.strip()
-            fm = re.match(r"(```|~~~)", s_)
-            if fm:
-                fence = None if fence == fm.group(1) else (fence or fm.group(1))
+            fm = re.match(r"(`{3,}|~{3,})(.*)$", s_)
+            if fm and (fence is None or (fm.group(1)[0] == fence[0] and len(fm.group(1)) >= len(fence) and not fm.group(2).strip())):
+                fence = None if fence else fm.group(1)
                 continue
             if fence or not s_ or s_.startswith("#") or re.fullmatch(r"\|[\s:|-]+\|?", s_) or "❓" in s_ or "是否" in s_:
                 continue
@@ -416,6 +418,21 @@ for f in files:
                 print(f"    {title} {len(group)} 条：")
                 for e in sorted(group, key=lambda x: x[0]):
                     print(f"      · 第 {e[6]} 行 {e[4]} → {e[5]}" + re.sub(r".*(#L\d+(?:-L\d+)?)\).*", r"\1", e[2]))
+    long_code, fence_, lang_, cnt_ = [], None, "", 0
+    if re.match(r"0?[2-5]", name):  # 只看 02–05 分层文档；成对识别代码块（同种字符、不短于开头），mermaid 图和空行不算
+        for ln in text.split("\n"):
+            fm = re.match(r" {0,3}(`{3,}|~{3,})(.*)$", ln)
+            if fm and fence_ is None:
+                fence_, lang_, cnt_ = fm.group(1), (fm.group(2).strip().split() or [""])[0].lower(), 0
+            elif fm and fm.group(1)[0] == fence_[0] and len(fm.group(1)) >= len(fence_) and not fm.group(2).strip():
+                if lang_ != "mermaid" and cnt_ > 15:
+                    long_code.append(cnt_)
+                fence_ = None
+            elif fence_ and ln.strip():
+                cnt_ += 1
+    if long_code:
+        print(f"    提示：{len(long_code)} 段代码超过 15 行（{'、'.join(map(str, long_code[:5]))} 行）：用文字和图讲清机制，"
+              "证据用行号链接，代码片段只留关键的约 10 行")
     if port_skips:
         print(f"    提示：{len(port_skips)} 处按端口号跳过、没有当成续行引用核验：" + "、".join(port_skips[:5])
               + "；如果其实是行号，改写成完整路径")
@@ -478,6 +495,42 @@ for d in sorted({os.path.dirname(os.path.abspath(f)) for f in files
     if os.path.isfile(idx) and "关键结论核对表" not in open(idx, encoding="utf-8").read():
         print(f"提示：{idx} 还没有「关键结论核对表」：首屏结论和否定、全称、数量等关键判断，"
               "逐条写范围、证据和查过的反例（见 SKILL.md 第 5 节第 8 条）")
+# AI 项目：画像要写 AI 形态；写了形态的，技术架构要有主形态对应的专项（只提示，不影响退出码）
+AI_WORD = re.compile(r"大模型|LLM|智能体|提示词|Agent ?型|AI Agent|(?<![-\w])Agent(?![-\w])")
+NOT_AI_AGENT = re.compile(r"User-Agent|ssh-agent|SSH Agent|gpg-agent|Zabbix Agent|监控 Agent|采集 Agent", re.I)
+for d in sorted({os.path.dirname(os.path.abspath(f)) for f in files
+                 if os.path.basename(f).startswith("00-") and os.path.isfile(f)}):
+    t00 = "".join(open(os.path.join(d, n), encoding="utf-8").read() for n in sorted(os.listdir(d)) if n.startswith("00-") and n.endswith(".md"))
+    clue = bool(AI_WORD.search(NOT_AI_AGENT.sub("", t00)))
+    try:
+        ai_ = json.load(open(os.path.join(d, "_stats.json"), encoding="utf-8")).get("ai") or {}
+        clue = clue or bool(ai_.get("sdk") or ai_.get("assets"))
+    except Exception:
+        pass
+    mline = re.search(r"AI\s*形态[^\n]*", t00)
+    if not mline:
+        if clue:
+            print(f"提示：{d} 的项目画像里没写「AI 形态」（非 AI / 嵌入型 / Agent 型 / 混合型），它决定 L2 的分析重点（见 references/layers.md L0）")
+        continue
+    seg = re.sub(r"[（(][^）)]*[）)]", "", mline.group(0))  # 只看这一行，括号里的说明不算
+    seg = re.sub(r"\]\([^)]*\)", "]", seg)
+    if seg.lstrip("AI 形态：:|* ").startswith("非 AI") or "非 AI" in seg[:20]:
+        continue
+    if "混合型" in seg:
+        main_ = re.search(r"(嵌入型|Agent 型)[^，,；;。]{0,4}(为主|是主)|(?:主形态|以)[^，,；;。]{0,4}(嵌入型|Agent 型)", seg)
+        if not main_:
+            print(f"提示：{d} 的 AI 形态写了混合型，没写哪种为主（例如\"混合型，嵌入型为主\"）：主形态展开写，次形态只列入口（见 references/layers.md L2）")
+            continue
+        forms = [x for x in main_.groups() if x in ("嵌入型", "Agent 型")]
+    else:
+        forms = [x for x in ("嵌入型", "Agent 型") if x in seg]
+    t02 = "".join(open(os.path.join(d, n), encoding="utf-8").read() for n in sorted(os.listdir(d)) if n.startswith("02-") and n.endswith(".md"))
+    if not t02:
+        continue
+    need = [(k, x) for k, x, w in (("Agent 型", "Harness 清单", "Harness"), ("嵌入型", "AI 链路表", "AI 链路")) if k in forms and w not in t02]
+    if need:
+        print(f"提示：画像里的主 AI 形态是{'、'.join(k for k, x in need)}，"
+              f"但技术架构里还没有{'、'.join(x for k, x in need)}（见 references/layers.md L2 的形态专项）")
 # 精读了核心模块，就要说明是谁选的、依据是什么
 for d in sorted({os.path.dirname(os.path.abspath(f)) for f in files
                  if is_l4(os.path.basename(f)) and os.path.isfile(f)}):

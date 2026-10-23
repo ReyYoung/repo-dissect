@@ -2,6 +2,37 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.8.0] - 2026-10-23
+
+Adds dedicated analysis for AI projects, agent skill / prompt packages, and command-line tools. Based on the retrospectives of two runs (gstack, a skill library; teamai-cli, a CLI that distributes AI assets) and a prompt written for product managers analyzing AI projects.
+
+### Added
+
+- **AI form (L0)**: when a project uses an LLM, classify it as embedded (the LLM is one step in an existing flow and code decides what happens next), agent (the LLM drives decisions while the system supplies tools and a context loop) or hybrid (state the primary and secondary form), with the evidence for the call.
+- **Form-specific sections in L2:**
+  - embedded: an "AI chain" table listing, for each model call, where its context comes from, how the prompt is assembled, where the output goes, how it is guarded and what users see on failure. Non-AI modules are described by the context they prepare for the next AI step or the output they guard after it; unrelated modules get a sentence;
+  - agent: a 10-item "harness checklist" (system prompt assembly, tools, loop, context, memory, guardrails, error recovery, sub-agents, cost and observability, human in the loop), each marked by constraint strength: enforced by code, only asked for in the prompt, or covered by tests;
+  - agent skill / prompt packages: a constraint-strength table and how much context each trigger loads;
+  - CLIs and skill packages: a "write surface" table (where it writes, overwrite or merge, whether it touches files the user edited, whether uninstall cleans up);
+  - an "engineering philosophy" opening: 2–3 sentences on the design principles that run through the project.
+- **New project type, agent skill or prompt package**; L1 becomes a skill inventory plus a host support matrix.
+- **`repo_stats.py` reports AI clues:**
+  - LLM-related dependencies (OpenAI, Anthropic, LangChain, LiteLLM, Qwen/DashScope, Zhipu, Spring AI, LangChain4j and others), read from dependency declarations only (not descriptions or keywords) across npm, Python, Go, Rust, Maven and Gradle;
+  - agent asset files (skills, commands, sub-agents, prompts, hooks, rule files), the largest prompt files, and the context size of skills (how much description text is always loaded, how large each SKILL.md is);
+  - vendored folders, docs folders and front-end React hooks folders are skipped; files for developing the project itself (AGENTS.md, CLAUDE.md, a root `.claude/` folder and the like) are listed separately, not as product assets.
+- **`checklinks.py` hints:**
+  - an AI project whose profile does not state the AI form, whose architecture lacks the harness checklist or AI chain table its primary form calls for, or a hybrid that does not say which form is primary;
+  - code blocks longer than 15 lines in the 02–05 layered docs (Mermaid and blank lines excluded).
+
+### Changed
+
+- **Evidence rule**: requirements written in prompts or SKILL.md only show what the document asks for, not that the model complies; behaviour claims without code enforcement or tests are at most 🔍. The common-misjudgment list gains "the agent will do X" and "it has memory / context management".
+- **Less code**: L4 explains mechanisms in words and diagrams with line links as evidence; code snippets only where words fall short, about 10 lines each.
+- **User journeys tied to sequence diagrams**: L1 business flows are drawn as user journeys with AI steps highlighted, and steps explained by an L3 sequence diagram say "see 03 figure N" in the caption. L3 sequence diagrams show the model as its own participant. Modules that call an LLM get an "AI" tag in the feature architecture diagram, and the report `meta` gains an "AI form" row.
+- **Safety**: when the analyzed project is a skill or prompt package, do not install it into your own agent or run its install scripts.
+- **The example report** gains the AI form, an engineering-philosophy opening and an AI chain table, and its feature architecture diagram tags the modules that call an LLM; it now has 807 references.
+- Regression tests now number 35.
+
 ## [1.7.1] - 2026-10-15
 
 When Codex and WorkBuddy dissected the same project (Tencent/teamai-cli) with 1.7.0, the four front-page stat cards looked very different. Partly the users picked different mechanisms; partly the rule only said "show 2–3 mechanisms for 架构学习" with no fixed card format, so the same mechanism got two names ("投递对账" vs "交付账本"), and one report showed concrete facts while the other showed concept words that only make sense after reading the body.

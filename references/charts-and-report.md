@@ -142,7 +142,7 @@ Mermaid 常见渲染错误（写完逐条自查）：
 2. 照着 `$SKILL_DIR/assets/examples/report.example.json` 写 `$OUT/report.json`（标准 JSON）。字段：
    - `title`、`subtitle`、`crumbs[]`（面包屑）；`goal`：主目标（如"架构学习""选型评估"），首屏格式检查按它判断；
    - `verdict`：`level` 用「推荐 / 有条件推荐 / 不推荐」之一时显示对应颜色，非选型目标可写「架构学习」等（中性色）；`summary` 一句话结论；`points[]` 不超过 3 条；
-   - `meta[]`：`[名称, 值]`，放仓库、版本、Commit、场景、运行验证；
+   - `meta[]`：`[名称, 值]`，放仓库、版本、Commit、场景、运行验证；AI 项目加一行"AI 形态"（如"嵌入型为主，含 Agent 编排"）；
    - `stats[]`：`[数值, 标签, 补充说明]`，按上面"关键数字按主目标用固定格式"写 4 个；
    - `notice`（可选）：`{"tone": "warn", "text": "..."}`；
    - `pending`（建议填）：待确认清单，每项是一句话或 `[事项, 说明]`，与 `index.md` 的「待确认清单」一致；
